@@ -1058,6 +1058,9 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
               </div>
             ))}
           </div>
+          <p style={{ fontSize: 11, color: C.inkFaint, marginTop: 10, marginBottom: 0, lineHeight: 1.5 }}>
+            Everything you enter is saved — your file is always ready to download.
+          </p>
         </div>
 
         {/* Spreadsheet preview */}
@@ -1526,7 +1529,7 @@ function YearEndSummary({ receipts, onBack, onPrint }) {
   );
 }
 
-function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedConfirm, onGenerateSummary }) {
+function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedConfirm, onGenerateSummary, onClearData }) {
   const total = receipts.reduce((s, r) => s + ((parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100)), 0);
   const byCategory = {};
   receipts.forEach(r => {
@@ -1579,9 +1582,28 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
             </p>
           )}
         </div>
-        <button className="pf-btn-primary" onClick={onAddAnother} style={{ padding: "12px 22px", fontSize: 14 }}>
-          + Add receipt
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button className="pf-btn-primary" onClick={onAddAnother} style={{ padding: "12px 22px", fontSize: 14 }}>
+            + Add receipt
+          </button>
+          {n > 0 && (
+            <button
+              onClick={onClearData}
+              style={{
+                background: "none", border: `1px solid ${C.creamDeep}`,
+                borderRadius: 11, padding: "11px 14px", fontSize: 12,
+                fontWeight: 600, color: C.inkFaint, cursor: "pointer",
+                fontFamily: "'DM Sans', sans-serif",
+                transition: "border-color 0.15s, color 0.15s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = C.red; e.currentTarget.style.color = C.red; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = C.creamDeep; e.currentTarget.style.color = C.inkFaint; }}
+              title="Clear all receipts and reset"
+            >
+              Clear data
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Soft momentum banner */}
@@ -2189,6 +2211,19 @@ export default function PreFileApp() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [receipts.length, isSaved]);
 
+  // ── Persistence: load receipts on mount ──
+  useEffect(() => {
+    const saved = localStorage.getItem("prefile_receipts");
+    if (saved) {
+      try { setReceipts(JSON.parse(saved)); } catch (e) {}
+    }
+  }, []);
+
+  // ── Persistence: save receipts whenever they change ──
+  useEffect(() => {
+    localStorage.setItem("prefile_receipts", JSON.stringify(receipts));
+  }, [receipts]);
+
   const showToast = msg => {
     setToast({ visible: true, message: msg });
     setTimeout(() => setToast(t => ({ ...t, visible: false })), 3000);
@@ -2207,6 +2242,14 @@ export default function PreFileApp() {
   const handleEdit      = () => setReceiptStep("edit");
   const handleSaveEdit  = u => { setPendingReceipt(u); setReceiptStep("confirm"); };
   const handleAddAnother = () => { setPage("receipt-flow"); setReceiptStep("add"); };
+  const handleClearData  = () => {
+    if (!window.confirm("Clear all receipts? This cannot be undone.")) return;
+    localStorage.removeItem("prefile_receipts");
+    setReceipts([]);
+    setIsSaved(false);
+    setPage("home");
+    showToast("All receipts cleared");
+  };
 
   const renderReceiptFlow = () => {
     switch (receiptStep) {
@@ -2582,7 +2625,7 @@ export default function PreFileApp() {
         )}
         {page === "receipt-flow" && renderReceiptFlow()}
         {page === "organizer" && (
-          <OrganizerScreen receipts={receipts} onAddAnother={handleAddAnother} isSaved={isSaved} onExport={handleExport} showSavedConfirm={showSavedConfirm} onGenerateSummary={handleGenerateSummary} />
+          <OrganizerScreen receipts={receipts} onAddAnother={handleAddAnother} isSaved={isSaved} onExport={handleExport} showSavedConfirm={showSavedConfirm} onGenerateSummary={handleGenerateSummary} onClearData={handleClearData} />
         )}
         {page === "check" && renderCheckFlow()}
         {page === "yearend" && (
