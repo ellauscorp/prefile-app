@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import * as XLSX from "xlsx";
 
 // ─── DESIGN TOKENS ───────────────────────────────────────────────────────────
 const C = {
@@ -21,24 +22,117 @@ const CATEGORIES = [
   "Equipment & tools", "Other",
 ];
 
+
+const CATEGORY_DEFINITIONS = {
+  "Advertising & marketing": "Costs to promote your business — social media ads, flyers, business cards, sponsored posts, or any paid promotion.",
+  "Car & mileage":           "Business driving expenses — client visits, errands, deliveries. Track miles at $0.67/mile (2025) or deduct actual car costs.",
+  "Contractors & services":  "Payments to freelancers, subcontractors, or agencies you hired to do work for your business.",
+  "Legal & professional":    "Fees paid to lawyers, accountants, consultants, or other licensed professionals for business-related services.",
+  "Office expenses":         "Day-to-day office costs — printer ink, paper, pens, folders, postage, and small items used to run your business.",
+  "Supplies":                "Materials consumed in your business — packaging, shipping supplies, raw materials, or items you use to deliver your product or service.",
+  "Travel":                  "Overnight business trips — flights, hotels, taxis, rental cars. Must be primarily for business, not personal.",
+  "Business meals":          "Food and drinks with clients, partners, or while traveling for work. Generally 50% deductible — keep the receipt and note who you met.",
+  "Utilities":               "Business portion of phone, internet, electricity, or water bills. Deduct only the percentage used for work.",
+  "Software & subscriptions":"Apps, tools, and platforms used for your business — design tools, accounting software, project managers, cloud storage.",
+  "Insurance":               "Business insurance premiums — liability, professional indemnity, equipment, or health insurance if you're self-employed.",
+  "Rent / workspace":        "Rent for an office, studio, or workspace. If you work from home, you may deduct a percentage based on your home office size.",
+  "Taxes & licenses":        "Business licenses, permits, professional certifications, and certain taxes paid as part of running your business.",
+  "Equipment & tools":       "Business equipment purchases — computers, cameras, tools, machinery. May be fully deductible in year one under Section 179.",
+  "Other":                   "Expenses that don't fit a standard category. Note the business purpose clearly — your tax professional can help classify these.",
+};
+
 const PAYWALL_COPY_VARIANT = "A"; // change to "B" to test
 
+
+// ─── SVG ICON SYSTEM ─────────────────────────────────────────────────────────
+// All icons: stroke-based, 24×24 viewBox, no fill, Stripe/Linear style
+const SvgIcon = ({ d, size = 16, color = "currentColor", strokeWidth = 1.5, style = {} }) => (
+  <svg
+    width={size} height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={{ display: "inline-block", flexShrink: 0, ...style }}
+  >
+    {Array.isArray(d) ? d.map((path, i) => <path key={i} d={path} />) : <path d={d} />}
+  </svg>
+);
+
+// Icon path library — all 24×24, stroke only
+const ICON_PATHS = {
+  receipt:        ["M4 2h16v20l-2-1-2 1-2-1-2 1-2-1-2 1V2Z", "M8 10h8", "M8 14h8", "M8 6h4"],
+  megaphone:      ["M3 11v2M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.82", "M21 12C21 7.582 16.97 4 12 4c-1.66 0-3.21.42-4.54 1.15L3 7v10l4.46 1.85A9.97 9.97 0 0012 20"],
+  car:            ["M5 17H3v-5l2-5h14l2 5v5h-2", "M5 17a2 2 0 104 0 2 2 0 00-4 0", "M15 17a2 2 0 104 0 2 2 0 00-4 0", "M3 12h18"],
+  users:          ["M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2", "M9 11a4 4 0 100-8 4 4 0 000 8", "M23 21v-2a4 4 0 00-3-3.87", "M16 3.13a4 4 0 010 7.75"],
+  briefcase:      ["M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2Z", "M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2", "M12 12v4", "M8 12h8"],
+  paperclip:      ["M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"],
+  package:        ["M16.5 9.4l-9-5.19", "M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16Z", "M3.27 6.96L12 12.01l8.73-5.05", "M12 22.08V12"],
+  plane:          ["M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5Z"],
+  utensils:       ["M3 2v7c0 1.1.9 2 2 2h4a2 2 0 002-2V2", "M7 2v20", "M21 15V2a5 5 0 00-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"],
+  zap:            ["M13 2L3 14h9l-1 8 10-12h-9l1-8Z"],
+  shield:         ["M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"],
+  home:           ["M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9Z", "M9 22V12h6v10"],
+  clipboard:      ["M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2", "M9 2h6a1 1 0 011 1v2a1 1 0 01-1 1H9a1 1 0 01-1-1V3a1 1 0 011-1Z", "M12 11h4", "M12 16h4", "M8 11h.01", "M8 16h.01"],
+  wrench:         ["M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76Z"],
+  file:           ["M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6Z", "M14 2v6h6", "M16 13H8", "M16 17H8", "M10 9H8"],
+  // Paywall / UI icons
+  save:           ["M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2Z", "M17 21v-8H7v8", "M7 3v5h8"],
+  folder:         ["M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11Z"],
+  download:       ["M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4", "M7 10l5 5 5-5", "M12 15V3"],
+  // Check / check-reveal
+  checkCircle:    ["M22 11.08V12a10 10 0 11-5.93-9.14", "M22 4L12 14.01l-3-3"],
+};
+
+// Convenience component — picks path by name
+const Icon = ({ name, size = 16, color = "currentColor", strokeWidth = 1.5, style = {} }) => (
+  <SvgIcon d={ICON_PATHS[name] || ICON_PATHS.file} size={size} color={color} strokeWidth={strokeWidth} style={style} />
+);
+
+// Category → icon name mapping
+const CAT_ICON = {
+  "Advertising & marketing":  "megaphone",
+  "Car & mileage":            "car",
+  "Contractors & services":   "users",
+  "Legal & professional":     "briefcase",
+  "Office expenses":          "paperclip",
+  "Supplies":                 "package",
+  "Travel":                   "plane",
+  "Business meals":           "utensils",
+  "Utilities":                "zap",
+  "Software & subscriptions": "wrench",
+  "Insurance":                "shield",
+  "Rent / workspace":         "home",
+  "Taxes & licenses":         "clipboard",
+  "Equipment & tools":        "wrench",
+  "Other":                    "file",
+};
+
+// Render a category icon as SVG (replaces emoji meta.icon renders)
+const CatIcon = ({ category, size = 14, color }) => {
+  const meta = CAT_META[category] || CAT_META["Other"];
+  const iconName = CAT_ICON[category] || "file";
+  return <Icon name={iconName} size={size} color={color || meta.color} strokeWidth={1.6} />;
+};
+
 const CAT_META = {
-  "Advertising & marketing": { icon: "📢", color: "#7C3AED" },
-  "Car & mileage":           { icon: "🚗", color: "#D97706" },
-  "Contractors & services":  { icon: "🤝", color: "#0369A1" },
-  "Legal & professional":    { icon: "⚖️", color: "#475569" },
-  "Office expenses":         { icon: "📎", color: "#1D4ED8" },
-  "Supplies":                { icon: "📦", color: "#1B5E20" },
-  "Travel":                  { icon: "✈️", color: "#0891B2" },
-  "Business meals":          { icon: "🍽️", color: "#D4A017" },
-  "Utilities":               { icon: "💡", color: "#C62828" },
-  "Software & subscriptions":{ icon: "💻", color: "#6B21A8" },
-  "Insurance":               { icon: "🛡️", color: "#065F46" },
-  "Rent / workspace":        { icon: "🏠", color: "#92400E" },
-  "Taxes & licenses":        { icon: "📋", color: "#374151" },
-  "Equipment & tools":       { icon: "🔧", color: "#7C2D12" },
-  "Other":                   { icon: "📄", color: "#6B7280" },
+  "Advertising & marketing": { color: "#7C3AED" },
+  "Car & mileage":           { color: "#D97706" },
+  "Contractors & services":  { color: "#0369A1" },
+  "Legal & professional":    { color: "#475569" },
+  "Office expenses":         { color: "#1D4ED8" },
+  "Supplies":                { color: "#1B5E20" },
+  "Travel":                  { color: "#0891B2" },
+  "Business meals":          { color: "#D4A017" },
+  "Utilities":               { color: "#C62828" },
+  "Software & subscriptions":{ color: "#6B21A8" },
+  "Insurance":               { color: "#065F46" },
+  "Rent / workspace":        { color: "#92400E" },
+  "Taxes & licenses":        { color: "#374151" },
+  "Equipment & tools":       { color: "#7C2D12" },
+  "Other":                   { color: "#6B7280" },
 };
 
 // Merchant → category auto-suggest
@@ -176,6 +270,81 @@ const GLOBAL_CSS = `
   }
 `;
 
+
+// ── CATEGORY LABEL WITH TOOLTIP ─────────────────────────────────────────────
+function CategoryLabel({ category, size = 12, showIcon = true, style = {} }) {
+  const meta = CAT_META[category] || CAT_META["Other"];
+  const def  = CATEGORY_DEFINITIONS[category] || "";
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <span
+      style={{
+        position: "relative",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        cursor: "default",
+        ...style,
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {showIcon && <CatIcon category={category} size={size + 1} color={meta.color} />}
+      <span style={{ fontSize: size, fontWeight: 600, color: meta.color }}>{category}</span>
+      {/* ⓘ indicator */}
+      <span style={{
+        fontSize: size - 2,
+        color: hovered ? meta.color : C.inkFaint,
+        lineHeight: 1,
+        transition: "color 0.15s",
+        userSelect: "none",
+        flexShrink: 0,
+      }}>ⓘ</span>
+
+      {/* Tooltip */}
+      {hovered && def && (
+        <span style={{
+          position: "absolute",
+          bottom: "calc(100% + 8px)",
+          left: "50%",
+          transform: "translateX(-50%)",
+          background: C.ink,
+          color: C.white,
+          fontSize: 11,
+          fontWeight: 400,
+          lineHeight: 1.55,
+          borderRadius: 10,
+          padding: "9px 13px",
+          width: 230,
+          zIndex: 9000,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
+          pointerEvents: "none",
+          whiteSpace: "normal",
+          textAlign: "left",
+          fontFamily: "'DM Sans', sans-serif",
+        }}>
+          {/* Tooltip arrow */}
+          <span style={{
+            position: "absolute",
+            bottom: -5,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 10, height: 10,
+            background: C.ink,
+            clipPath: "polygon(0 0, 100% 0, 50% 100%)",
+          }} />
+          <strong style={{ display: "block", marginBottom: 3, fontSize: 11, color: meta.color, display: "flex", alignItems: "center", gap: 5 }}>
+            <CatIcon category={category} size={11} color={meta.color} /> {category}
+          </strong>
+          {def}
+        </span>
+      )}
+    </span>
+  );
+}
+
+
 // ─── NAV ─────────────────────────────────────────────────────────────────────
 function Nav({ onLogoClick, receiptCount }) {
   return (
@@ -186,7 +355,14 @@ function Nav({ onLogoClick, receiptCount }) {
       backdropFilter: "blur(8px)",
     }}>
       <button onClick={onLogoClick} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ width: 32, height: 32, background: C.forest, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>📁</div>
+        <div style={{ width: 32, height: 32, background: C.forest, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M3 1.5H15C15.4142 1.5 15.75 1.83579 15.75 2.25V16.5L13.5 15L11.25 16.5L9 15L6.75 16.5L4.5 15L2.25 16.5V2.25C2.25 1.83579 2.58579 1.5 3 1.5Z" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+  <path d="M5.25 6H12.75" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+  <path d="M5.25 9H12.75" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+  <path d="M5.25 12H9.75" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+</svg>
+        </div>
         <span style={{ fontSize: 18, fontWeight: 700, color: C.ink, fontFamily: "'Fraunces', serif", letterSpacing: "-0.3px" }}>PreFile</span>
       </button>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -234,15 +410,15 @@ function MiniReceiptCard({ receipt, style = {} }) {
       boxShadow: "0 1px 8px rgba(0,0,0,0.05)",
       ...style,
     }}>
-      <div style={{ width: 36, height: 36, borderRadius: 9, background: meta.color + "18", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>
-        {meta.icon}
+      <div style={{ width: 36, height: 36, borderRadius: 9, background: meta.color + "18", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <CatIcon category={receipt.category} size={16} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, fontFamily: "'Fraunces', serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {receipt.merchant}
         </div>
-        <div style={{ fontSize: 11, color: meta.color, fontWeight: 600, marginTop: 2 }}>
-          {receipt.category}
+        <div style={{ marginTop: 2 }}>
+          <CategoryLabel category={receipt.category} size={11} showIcon={false} />
         </div>
       </div>
       <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, fontFamily: "'Fraunces', serif", flexShrink: 0 }}>
@@ -408,13 +584,13 @@ function Homepage({ onStart, onCheck }) {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 20 }}>
             {[
-              { n:"01", icon:"📸", title:"Add your receipts", body:"Photograph, upload, or type in any receipt — meals, software, shipping, phone bills." },
-              { n:"02", icon:"🏷️", title:"PreFile suggests a category", body:"We match common merchants automatically. You confirm or change — you always decide." },
-              { n:"03", icon:"📊", title:"Download your organizer", body:"A clean, color-coded file organized by category — ready for your tax professional." },
+              { n:"01", iconName:"receipt", title:"Add your receipts", body:"Photograph, upload, or type in any receipt — meals, software, shipping, phone bills." },
+              { n:"02", iconName:"clipboard", title:"PreFile suggests a category", body:"We match common merchants automatically. You confirm or change — you always decide." },
+              { n:"03", iconName:"download", title:"Download your organizer", body:"A clean, color-coded file organized by category — ready for your tax professional." },
             ].map((s, i) => (
               <div key={i} style={{ background:"rgba(255,255,255,0.05)", borderRadius:16, padding:"26px 22px", border:"1px solid rgba(255,255,255,0.08)" }}>
                 <div style={{ fontSize:11, fontWeight:700, color:C.forestLight, letterSpacing:"0.1em", marginBottom:10 }}>{s.n}</div>
-                <div style={{ fontSize:26, marginBottom:10 }}>{s.icon}</div>
+                <div style={{ marginBottom:10 }}><Icon name={s.iconName} size={26} color={C.forestLight} strokeWidth={1.5} /></div>
                 <div style={{ fontSize:15, fontWeight:700, color:C.white, fontFamily:"'Fraunces', serif", marginBottom:7 }}>{s.title}</div>
                 <div style={{ fontSize:13, color:"rgba(255,255,255,0.5)", lineHeight:1.65 }}>{s.body}</div>
               </div>
@@ -432,12 +608,15 @@ function Homepage({ onStart, onCheck }) {
           {CATEGORIES.map((cat, i) => {
             const meta = CAT_META[cat] || CAT_META["Other"];
             return (
-              <span key={i} style={{
-                background: C.white, border: `1px solid ${C.creamDark}`,
-                borderRadius: 20, padding: "6px 13px", fontSize: 12, fontWeight: 600, color: C.inkLight,
-                display: "flex", alignItems: "center", gap: 5,
-              }}>
-                <span style={{ fontSize: 13 }}>{meta.icon}</span>{cat}
+              <span key={i}
+                title={CATEGORY_DEFINITIONS[cat] || cat}
+                style={{
+                  background: C.white, border: `1px solid ${C.creamDark}`,
+                  borderRadius: 20, padding: "6px 13px", fontSize: 12, fontWeight: 600, color: C.inkLight,
+                  display: "flex", alignItems: "center", gap: 5, cursor: "default",
+                }}>
+                <CatIcon category={cat} size={13} />{cat}
+                <span style={{ fontSize: 10, color: C.inkFaint }}>ⓘ</span>
               </span>
             );
           })}
@@ -458,7 +637,7 @@ function Homepage({ onStart, onCheck }) {
               "Worried you're missing deductions you actually qualify for",
             ].map((pain, i) => (
               <div key={i} className="pf-card" style={{ padding:"18px 18px", display:"flex", gap:12, alignItems:"flex-start" }}>
-                <span style={{ fontSize:17, flexShrink:0, marginTop:1 }}>✅</span>
+                <span style={{ flexShrink:0, marginTop:1 }}><Icon name="checkCircle" size={17} color={C.forestMid} strokeWidth={2} /></span>
                 <span style={{ fontSize:13, color:C.inkLight, lineHeight:1.65 }}>{pain}</span>
               </div>
             ))}
@@ -671,7 +850,7 @@ function ConfirmScreen({ receipt, onConfirm, onEdit }) {
           </div>
           <div>
             <div style={{ fontSize:11, color:C.inkFaint, fontWeight:600, marginBottom:2 }}>Suggested category</div>
-            <div style={{ fontSize:14, fontWeight:700, color:meta.color }}>{receipt.category}</div>
+            <CategoryLabel category={receipt.category} size={14} />
           </div>
         </div>
 
@@ -797,11 +976,13 @@ function EditScreen({ receipt, onSave, onCancel }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // PAYWALL MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
-function PaywallModal({ onUnlock, onDismiss }) {
-  const features = [
-    { icon: "💾", text: "Save your receipts across sessions" },
-    { icon: "📁", text: "Access your organizer anytime" },
-    { icon: "📥", text: "Export your tax-ready CSV file" },
+function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
+  const valueItems = [
+    `${receiptCount} organized receipt${receiptCount !== 1 ? "s" : ""}`,
+    "Category breakdown by spend",
+    "Tax-ready formatting",
+    "Plain-English explanations",
+    "Notes column for business purpose",
   ];
 
   return (
@@ -815,102 +996,165 @@ function PaywallModal({ onUnlock, onDismiss }) {
         onClick={onDismiss}
         style={{
           position: "absolute", inset: 0,
-          background: "rgba(26,26,24,0.55)",
-          backdropFilter: "blur(4px)",
+          background: "rgba(26,26,24,0.6)",
+          backdropFilter: "blur(5px)",
         }}
       />
 
       {/* Modal card */}
       <div className="slide-up pf-card" style={{
         position: "relative", zIndex: 1,
-        maxWidth: 420, width: "100%",
-        padding: "32px 28px",
+        maxWidth: 400, width: "100%",
+        padding: "28px 26px",
         borderRadius: 22,
       }}>
         {/* Close */}
         <button
           onClick={onDismiss}
           style={{
-            position: "absolute", top: 16, right: 16,
+            position: "absolute", top: 14, right: 14,
             background: C.creamDark, border: "none", borderRadius: 8,
-            width: 28, height: 28, display: "flex", alignItems: "center",
+            width: 26, height: 26, display: "flex", alignItems: "center",
             justifyContent: "center", cursor: "pointer",
-            fontSize: 14, color: C.inkFaint, fontFamily: "'DM Sans', sans-serif",
+            fontSize: 13, color: C.inkFaint, fontFamily: "'DM Sans', sans-serif",
           }}
         >✕</button>
 
         {/* Icon */}
         <div style={{
-          width: 52, height: 52, borderRadius: 14,
+          width: 48, height: 48, borderRadius: 13,
           background: C.forest, display: "flex", alignItems: "center",
-          justifyContent: "center", fontSize: 24, marginBottom: 20,
-        }}>📁</div>
+          justifyContent: "center", marginBottom: 16,
+        }}>
+          <svg width="24" height="24" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 1.5H15C15.4142 1.5 15.75 1.83579 15.75 2.25V16.5L13.5 15L11.25 16.5L9 15L6.75 16.5L4.5 15L2.25 16.5V2.25C2.25 1.83579 2.58579 1.5 3 1.5Z" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M5.25 6H12.75" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+            <path d="M5.25 9H12.75" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+            <path d="M5.25 12H9.75" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+        </div>
 
-        {/* Headline */}
+        {/* Strong hook headline */}
         <h2 style={{
           fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 700,
-          color: C.ink, letterSpacing: "-0.3px", marginBottom: 8,
+          color: C.ink, letterSpacing: "-0.3px", marginBottom: 6,
         }}>
-          Stay organized and ready for tax time
+          Your tax-ready file is ready
         </h2>
-        <p style={{ fontSize: 12, color: C.inkFaint, marginTop: -4, marginBottom: 12 }}>
-          This file was built from your receipts — don't lose it
-        </p>
-        <p style={{ fontSize: 13, color: C.inkLight, lineHeight: 1.65, marginBottom: 22 }}>
-          Your tax-ready file is already prepared — save your receipts and download it instantly.
+        <p style={{ fontSize: 13, color: C.inkLight, lineHeight: 1.6, marginBottom: 18 }}>
+          We've already organized and formatted everything — download it instantly.
         </p>
 
-        {/* Features */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-          {features.map(f => (
-            <div key={f.text} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: 9, flexShrink: 0,
-                background: "rgba(27,94,32,0.1)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 15,
-              }}>{f.icon}</div>
-              <span style={{ fontSize: 13, color: C.ink, fontWeight: 500 }}>{f.text}</span>
+        {/* Value stack */}
+        <div style={{ marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.inkFaint, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>
+            Your file includes:
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 14 }}>
+            {valueItems.map(item => (
+              <div key={item} style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                <Icon name="checkCircle" size={13} color={C.forest} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+                <span style={{ fontSize: 13, color: C.ink }}>{item}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Spreadsheet preview */}
+        <div style={{
+          border: `1px solid ${C.creamDeep}`, borderRadius: 10,
+          overflow: "hidden", marginBottom: 14,
+        }}>
+          <div style={{
+            background: C.ink, display: "grid",
+            gridTemplateColumns: "60px 1fr 1fr 56px",
+            padding: "5px 10px", gap: 6,
+          }}>
+            {["Date","Merchant","Category","Amount"].map(h => (
+              <span key={h} style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
+            ))}
+          </div>
+          {[
+            ["Apr 18", "Canva Pro", "Software & subscriptions", "$12.99"],
+            ["Apr 15", "USPS Shipping", "Supplies", "$47.80"],
+            ["Apr 12", "Starbucks", "Business meals", "$38.50"],
+          ].map((row, i) => (
+            <div key={i} style={{
+              display: "grid", gridTemplateColumns: "60px 1fr 1fr 56px",
+              padding: "6px 10px", gap: 6,
+              background: i % 2 === 0 ? C.white : C.cream,
+              borderTop: `1px solid ${C.creamDark}`,
+            }}>
+              {row.map((cell, ci) => (
+                <span key={ci} style={{
+                  fontSize: 10, color: ci === 0 ? C.inkFaint : ci === 3 ? C.ink : C.inkLight,
+                  fontWeight: ci === 3 ? 700 : 400,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>{cell}</span>
+              ))}
             </div>
           ))}
+          <div style={{ padding: "5px 10px", background: C.creamDark, borderTop: `1px solid ${C.creamDeep}` }}>
+            <span style={{ fontSize: 9, color: C.inkFaint, fontStyle: "italic" }}>Preview of your file — your actual receipts will appear here</span>
+          </div>
         </div>
+
+        {/* Confidence line */}
+        <div style={{
+          background: "rgba(27,94,32,0.06)", borderRadius: 9,
+          padding: "9px 12px", marginBottom: 8,
+          fontSize: 11, color: C.forestMid, lineHeight: 1.55, fontStyle: "italic",
+        }}>
+          Formatted exactly how most tax professionals prefer to receive expense data.
+        </div>
+
+        {/* Soft urgency */}
+        <p style={{ fontSize: 11, color: C.inkFaint, marginBottom: 6, lineHeight: 1.5 }}>
+          Most people download this right after organizing.
+        </p>
+
+        {/* Emotional payoff */}
+        <p style={{ fontSize: 12, color: C.inkFaint, marginBottom: 18, lineHeight: 1.5 }}>
+          Skip the stress of organizing this later — it's already done.
+        </p>
 
         {/* Price */}
         <div style={{
-          background: C.creamDark, borderRadius: 12, padding: "12px 16px",
+          background: C.creamDark, borderRadius: 11, padding: "11px 14px",
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          marginBottom: 18,
+          marginBottom: 14,
         }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>One-time payment</div>
-            <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 2 }}>No subscription · Keep forever</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.ink }}>One-time · No subscription</div>
+            <div style={{ fontSize: 10, color: C.inkFaint, marginTop: 2 }}>Keep forever · Instant download</div>
           </div>
           <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 700, color: C.forest }}>$12</div>
         </div>
 
-        {/* CTA buttons */}
+        {/* Primary CTA */}
         <button
           className="pf-btn-primary"
           onClick={onUnlock}
-          style={{ width: "100%", fontSize: 15, padding: "14px", marginBottom: 10 }}
+          style={{ width: "100%", fontSize: 15, padding: "14px", marginBottom: 6 }}
         >
-          Unlock and save →
+          Unlock My File
         </button>
-        <div style={{ marginTop: 7, fontSize: 11, color: C.inkFaint, textAlign: "center" }}>
-          {PAYWALL_COPY_VARIANT === "A"
-            ? "Takes 10 seconds · One-time payment"
-            : "Takes 10 seconds · Pay once, keep forever"}
+        <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginBottom: 12 }}>
+          One-time payment · No subscription
         </div>
+
         <button
           className="pf-btn-ghost"
           onClick={onDismiss}
-          style={{ width: "100%", textAlign: "center" }}
+          style={{ width: "100%", textAlign: "center", marginBottom: 12 }}
         >
           Continue without saving
         </button>
 
-        <div style={{ marginTop: 14, fontSize: 10, color: C.inkFaint, textAlign: "center" }}>
-          PreFile is an organizational tool · Not tax advice · Always verify with your tax professional
+        {/* Social proof + legal */}
+        <div style={{ fontSize: 10, color: C.inkFaint, textAlign: "center", lineHeight: 1.6 }}>
+          Used by freelancers and small business owners<br />
+          PreFile is an organizational tool · Not tax advice
         </div>
       </div>
     </div>
@@ -920,7 +1164,369 @@ function PaywallModal({ onUnlock, onDismiss }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ORGANIZER SCREEN — UPDATED WITH PART 1 IMPROVEMENTS
 // ═══════════════════════════════════════════════════════════════════════════════
-function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedConfirm }) {
+
+// ── MISSING DEDUCTIONS PANEL ─────────────────────────────────────────────────
+function MissingDeductionsPanel({ receipts }) {
+  const presentCats = new Set(receipts.map(r => r.category));
+  const missing = COMMON_FREELANCER_CATS.filter(cat => !presentCats.has(cat));
+  const coverage = COMMON_FREELANCER_CATS.filter(cat => presentCats.has(cat)).length;
+  const isStrong = coverage >= 3;
+  const [expanded, setExpanded] = useState(true);
+
+  // Only show if user has at least 1 receipt
+  if (receipts.length === 0) return null;
+
+  return (
+    <div className="pf-card fade-in" style={{
+      marginBottom: 20,
+      border: `1.5px solid ${isStrong ? "rgba(27,94,32,0.2)" : "rgba(214,158,0,0.25)"}`,
+      overflow: "hidden",
+    }}>
+      {/* Header — always visible */}
+      <button
+        onClick={() => setExpanded(e => !e)}
+        style={{
+          width: "100%", background: "none", border: "none", cursor: "pointer",
+          padding: "14px 18px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          fontFamily: "'DM Sans', sans-serif",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Icon
+            name={isStrong ? "checkCircle" : "zap"}
+            size={16}
+            color={isStrong ? C.forestMid : "#B45309"}
+            strokeWidth={2}
+          />
+          <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>
+            {isStrong
+              ? "You've captured most common expense categories"
+              : "You're likely missing a few deductions — review before exporting"
+            }
+          </span>
+        </div>
+        <Icon
+          name={expanded ? "checkCircle" : "zap"}
+          size={14}
+          color={C.inkFaint}
+          strokeWidth={1.8}
+          style={{ transform: expanded ? "rotate(0deg)" : "rotate(180deg)", transition: "transform 0.2s" }}
+        />
+      </button>
+
+      {/* Coverage bar */}
+      <div style={{ paddingInline: 18, paddingBottom: expanded ? 0 : 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: expanded ? 12 : 0 }}>
+          <div style={{
+            flex: 1, height: 5, background: C.creamDeep, borderRadius: 10, overflow: "hidden",
+          }}>
+            <div style={{
+              height: "100%",
+              width: `${(coverage / COMMON_FREELANCER_CATS.length) * 100}%`,
+              background: isStrong ? C.forestMid : "#D97706",
+              borderRadius: 10,
+              transition: "width 0.6s ease",
+            }} />
+          </div>
+          <span style={{ fontSize: 11, color: C.inkFaint, whiteSpace: "nowrap", flexShrink: 0 }}>
+            {coverage} of {COMMON_FREELANCER_CATS.length} common categories
+          </span>
+        </div>
+      </div>
+
+      {/* Missing categories — collapsible */}
+      {expanded && missing.length > 0 && (
+        <div style={{ paddingInline: 18, paddingBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.inkFaint, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>
+            You might be missing these common deductions:
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {missing.map(cat => {
+              const meta = CAT_META[cat] || CAT_META["Other"];
+              const shortDef = SHORT_DEFS[cat] || CATEGORY_DEFINITIONS[cat] || "";
+              return (
+                <div key={cat} style={{
+                  background: C.cream,
+                  border: `1px solid ${C.creamDeep}`,
+                  borderLeft: `3px solid ${meta.color}`,
+                  borderRadius: "0 10px 10px 0",
+                  padding: "11px 14px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <CatIcon category={cat} size={13} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{cat}</span>
+                  </div>
+                  <p style={{ fontSize: 11, color: C.inkLight, lineHeight: 1.6, margin: "0 0 6px" }}>
+                    {shortDef}
+                  </p>
+                  <p style={{ fontSize: 10, color: C.inkFaint, fontStyle: "italic", margin: 0, lineHeight: 1.5 }}>
+                    Many freelancers forget to track this — even small amounts add up over the year.
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {expanded && missing.length === 0 && (
+        <div style={{ padding: "4px 18px 16px", fontSize: 12, color: C.forestMid }}>
+          Great — you have receipts across all commonly missed categories.
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ─── SMART ASSISTANT — MISSING DEDUCTION DETECTOR ────────────────────────────
+const COMMON_FREELANCER_CATS = [
+  "Business meals",
+  "Software & subscriptions",
+  "Utilities",
+  "Rent / workspace",
+  "Insurance",
+];
+
+const SHORT_DEFS = {
+  "Business meals":          "Client meals, coffee meetings, working lunches — 50% deductible with a business purpose.",
+  "Software & subscriptions":"Design tools, accounting apps, cloud storage, project managers — fully deductible.",
+  "Utilities":               "Business portion of phone, internet, or electricity — deduct the percentage used for work.",
+  "Rent / workspace":        "Office rent or home office deduction — even a dedicated corner of a room may qualify.",
+  "Insurance":               "Business liability, professional indemnity, or self-employed health insurance premiums.",
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// YEAR-END SUMMARY SCREEN
+// ═══════════════════════════════════════════════════════════════════════════════
+function YearEndSummary({ receipts, onBack, onPrint }) {
+  const total     = receipts.reduce((s, r) => s + ((parseFloat(r.amount)||0) * ((r.businessPct||100)/100)), 0);
+  const gross     = receipts.reduce((s, r) => s + (parseFloat(r.amount)||0), 0);
+  const n         = receipts.length;
+  const prepDate  = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const taxYear   = "2025";
+
+  // Category breakdown sorted highest → lowest
+  const catTotals = {};
+  receipts.forEach(r => {
+    const amt = (parseFloat(r.amount)||0) * ((r.businessPct||100)/100);
+    catTotals[r.category] = (catTotals[r.category] || 0) + amt;
+  });
+  const sorted = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
+  const topCat  = sorted[0]?.[0] || null;
+
+  // Insight: which common cats are missing
+  const presentCats  = new Set(receipts.map(r => r.category));
+  const missingCommon = COMMON_FREELANCER_CATS.filter(c => !presentCats.has(c));
+
+  return (
+    <>
+      {/* Print styles injected into head */}
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          body { background: white !important; }
+          .yer-wrapper { box-shadow: none !important; border: none !important; max-width: 100% !important; padding: 32px !important; }
+        }
+      `}</style>
+
+      {/* Back + Print bar */}
+      <div className="no-print" style={{
+        position: "sticky", top: 0, zIndex: 10,
+        background: C.cream, borderBottom: `1px solid ${C.creamDark}`,
+        padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between",
+      }}>
+        <button className="pf-btn-ghost" onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, textDecoration: "none", color: C.inkFaint }}>
+          <Icon name="file" size={14} color={C.inkFaint} /> ← Back to organizer
+        </button>
+        <button className="pf-btn-primary" onClick={onPrint} style={{ padding: "9px 20px", fontSize: 13 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Icon name="download" size={14} color="white" /> Print / Save as PDF
+          </span>
+        </button>
+      </div>
+
+      {/* Report body */}
+      <div style={{ maxWidth: 720, margin: "32px auto 60px", padding: "0 24px" }}>
+        <div className="yer-wrapper" style={{
+          background: "white", borderRadius: 20,
+          boxShadow: "0 4px 32px rgba(0,0,0,0.08)",
+          border: `1px solid ${C.creamDark}`,
+          overflow: "hidden",
+        }}>
+
+          {/* ── HEADER BAND ── */}
+          <div style={{ background: C.forest, padding: "32px 36px 28px" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                  <div style={{ width: 32, height: 32, background: "rgba(255,255,255,0.15)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Icon name="receipt" size={18} color="white" strokeWidth={1.5} />
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,0.7)", letterSpacing: "0.05em", textTransform: "uppercase" }}>PreFile</span>
+                </div>
+                <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, fontWeight: 700, color: "white", letterSpacing: "-0.5px", margin: 0 }}>
+                  Year-End Summary
+                </h1>
+                <p style={{ fontSize: 14, color: "rgba(255,255,255,0.65)", marginTop: 4 }}>
+                  Tax Year {taxYear} · Prepared {prepDate}
+                </p>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginBottom: 4 }}>Total business deductions</div>
+                <div style={{ fontFamily: "'Fraunces', serif", fontSize: 34, fontWeight: 700, color: "white" }}>
+                  ${total.toFixed(2)}
+                </div>
+              </div>
+            </div>
+
+            {/* Stat row */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+              {[
+                { label: "Receipts tracked",    value: n.toString() },
+                { label: "Gross receipt total",  value: "$" + gross.toFixed(2) },
+                { label: "Categories covered",   value: sorted.length + " categories" },
+              ].map(s => (
+                <div key={s.label} style={{
+                  background: "rgba(255,255,255,0.1)", borderRadius: 12, padding: "14px 16px",
+                }}>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.55)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>
+                    {s.label}
+                  </div>
+                  <div style={{ fontFamily: "'Fraunces', serif", fontSize: 18, fontWeight: 700, color: "white" }}>
+                    {s.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── CATEGORY BREAKDOWN ── */}
+          <div style={{ padding: "28px 36px" }}>
+            <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 700, color: C.ink, letterSpacing: "-0.2px", marginBottom: 16 }}>
+              Breakdown by category
+            </h2>
+
+            {sorted.length === 0 && (
+              <div style={{ color: C.inkFaint, fontSize: 13 }}>No receipts to summarize.</div>
+            )}
+
+            {sorted.map(([cat, amt], i) => {
+              const meta    = CAT_META[cat] || CAT_META["Other"];
+              const pct     = total > 0 ? (amt / total) * 100 : 0;
+              const isTop   = i === 0;
+              return (
+                <div key={cat} style={{
+                  display: "grid", gridTemplateColumns: "1fr auto",
+                  alignItems: "center", gap: 12,
+                  padding: "12px 0",
+                  borderBottom: `1px solid ${C.creamDark}`,
+                }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+                      <CatIcon category={cat} size={13} />
+                      <span style={{ fontSize: 13, fontWeight: isTop ? 700 : 600, color: C.ink }}>
+                        {cat}
+                      </span>
+                      {isTop && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, color: C.forest,
+                          background: "rgba(27,94,32,0.1)", borderRadius: 6, padding: "1px 7px",
+                        }}>Largest</span>
+                      )}
+                    </div>
+                    {/* Bar */}
+                    <div style={{ height: 4, background: C.creamDeep, borderRadius: 6, overflow: "hidden" }}>
+                      <div style={{
+                        height: "100%", width: `${pct}%`,
+                        background: meta.color, borderRadius: 6,
+                        transition: "width 0.6s ease",
+                      }} />
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 700, color: C.ink }}>
+                      ${amt.toFixed(2)}
+                    </div>
+                    <div style={{ fontSize: 10, color: C.inkFaint }}>{pct.toFixed(1)}% of total</div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Total row */}
+            {sorted.length > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto", padding: "14px 0 0", gap: 12 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>Total business deductions</span>
+                <span style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 700, color: C.forest }}>
+                  ${total.toFixed(2)}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* ── INSIGHTS ── */}
+          <div style={{ padding: "0 36px 28px" }}>
+            <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 700, color: C.ink, letterSpacing: "-0.2px", marginBottom: 14 }}>
+              Insights
+            </h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {[
+                topCat && {
+                  icon: "checkCircle",
+                  color: C.forestMid,
+                  text: `Your largest expense category was ${topCat} — ${(((catTotals[topCat]||0)/total)*100).toFixed(0)}% of total tracked expenses.`,
+                },
+                {
+                  icon: "receipt",
+                  color: C.forestMid,
+                  text: `You tracked ${n} receipt${n !== 1 ? "s" : ""} across ${sorted.length} categor${sorted.length !== 1 ? "ies" : "y"} this year.`,
+                },
+                missingCommon.length > 0 && {
+                  icon: "zap",
+                  color: "#B45309",
+                  text: `Categories you may have missed: ${missingCommon.slice(0, 3).join(", ")}. These are commonly overlooked by freelancers.`,
+                },
+                {
+                  icon: "shield",
+                  color: C.forestMid,
+                  text: "Keep this summary with your tax records. Your accountant may request documentation for any listed expense.",
+                },
+              ].filter(Boolean).map((item, i) => (
+                <div key={i} style={{
+                  display: "flex", gap: 12, alignItems: "flex-start",
+                  background: C.cream, borderRadius: 10, padding: "11px 14px",
+                }}>
+                  <Icon name={item.icon} size={14} color={item.color} strokeWidth={2} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <p style={{ fontSize: 12, color: C.inkLight, lineHeight: 1.65, margin: 0 }}>{item.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── DISCLAIMER ── */}
+          <div style={{ background: C.creamDark, padding: "16px 36px" }}>
+            <p style={{ fontSize: 10, color: C.inkFaint, lineHeight: 1.6, margin: 0 }}>
+              <strong>Disclaimer:</strong> PreFile is an organizational tool — not tax advice. All amounts are self-reported estimates.
+              Confirm deductibility of each expense with a qualified tax professional before filing. Amounts shown reflect business
+              use percentages entered by the user and may not reflect final deductible amounts.
+            </p>
+          </div>
+
+        </div>
+
+        {/* Print hint */}
+        <div className="no-print" style={{ textAlign: "center", marginTop: 16, fontSize: 11, color: C.inkFaint }}>
+          Use Print / Save as PDF above · Or press Cmd+P (Mac) / Ctrl+P (Windows)
+        </div>
+      </div>
+    </>
+  );
+}
+
+function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedConfirm, onGenerateSummary }) {
   const total = receipts.reduce((s, r) => s + ((parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100)), 0);
   const byCategory = {};
   receipts.forEach(r => {
@@ -985,7 +1591,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
           borderRadius: 12, padding: "10px 16px", marginBottom: 20,
           display: "flex", alignItems: "center", gap: 10,
         }}>
-          <span style={{ fontSize: 16 }}>{n >= 5 ? "🎯" : "📈"}</span>
+          <Icon name={n >= 5 ? "checkCircle" : "zap"} size={16} color={C.forest} strokeWidth={1.8} />
           <span style={{ fontSize: 13, color: momentumColor, fontWeight: 600 }}>
             {momentumMsg}
           </span>
@@ -1009,7 +1615,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
 
           {n === 0 && (
             <div className="pf-card" style={{ padding: 32, textAlign: "center" }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
+              <div style={{ marginBottom: 12 }}><Icon name="file" size={32} color={C.inkFaint} strokeWidth={1.2} /></div>
               <div style={{ fontSize: 14, color: C.inkFaint }}>No receipts yet — add your first one above</div>
             </div>
           )}
@@ -1024,10 +1630,13 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
             }}>
               <span style={{ fontSize: 15 }}>✅</span>
               <span style={{ fontSize: 13, fontWeight: 600, color: C.forest }}>
-                Saved · Your file is now yours
+                Saved ✓ Your file is now yours
               </span>
             </div>
           )}
+
+          {/* SMART ASSISTANT — MISSING DEDUCTIONS */}
+          <MissingDeductionsPanel receipts={receipts} />
 
           {/* EXPORT PREVIEW + DOWNLOAD */}
           {n > 0 && (
@@ -1060,8 +1669,8 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                       background: i % 2 === 0 ? C.white : C.cream,
                       borderBottom: `1px solid ${C.creamDark}`,
                     }}>
-                      <span style={{ fontSize: 12, color: C.inkLight, display: "flex", alignItems: "center", gap: 7 }}>
-                        <span style={{ fontSize: 13 }}>{meta.icon}</span>{cat}
+                      <span style={{ display: "flex", alignItems: "center" }}>
+                        <CategoryLabel category={cat} size={12} />
                       </span>
                       <span style={{ fontSize: 12, fontWeight: 700, color: C.ink }}>${amt.toFixed(2)}</span>
                     </div>
@@ -1080,6 +1689,41 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
 
               {/* Download button */}
               <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${C.creamDark}` }}>
+
+                {/* Export moment — what's included */}
+                {receipts.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 10 }}>
+                      Your file includes:
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                      {[
+                        `${receipts.length} organized receipt${receipts.length !== 1 ? "s" : ""}`,
+                        "Category breakdown with color coding",
+                        "Tax-ready formatting",
+                        "Definitions for every category",
+                        "Notes column for business purpose",
+                      ].map((item, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.inkLight }}>
+                          <Icon name="checkCircle" size={13} color={C.forestMid} strokeWidth={2} />
+                          {item}
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{
+                      background: "rgba(27,94,32,0.06)", borderRadius: 9,
+                      padding: "9px 12px", marginBottom: 12,
+                      fontSize: 11, color: C.forestMid, lineHeight: 1.55, fontStyle: "italic",
+                    }}>
+                      This is formatted exactly how most tax professionals prefer to receive expense data.
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: C.forest, marginBottom: 12 }}>
+                      <Icon name="checkCircle" size={14} color={C.forest} strokeWidth={2.2} />
+                      Ready to send to your accountant
+                    </div>
+                  </div>
+                )}
+
                 {receipts.length > 0 && (
                   <p style={{ fontSize: 11, color: C.inkFaint, marginBottom: 8, textAlign: "center" }}>
                     This file is ready — unlock to download
@@ -1090,7 +1734,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                   onClick={onExport}
                   style={{ width: "100%", fontSize: 14, padding: "13px" }}
                 >
-                  {isSaved ? "⬇ Download my tax-ready file" : "🔒 Download my tax-ready file"}
+                  {isSaved ? "⬇ Download color-coded Excel" : "🔒 Download color-coded Excel"}
                 </button>
                 <div style={{ marginTop: 8, fontSize: 11, color: C.inkFaint, textAlign: "center" }}>
                   {isSaved
@@ -1098,6 +1742,23 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                     : "Free to try · Pay only to save and export"
                   }
                 </div>
+
+                {/* Year-End Summary trigger */}
+                {receipts.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <button
+                      onClick={onGenerateSummary}
+                      className="pf-btn-secondary"
+                      style={{ width: "100%", fontSize: 13, padding: "11px", gap: 8 }}
+                    >
+                      <Icon name="clipboard" size={14} color={C.ink} />
+                      Generate Year-End Summary
+                    </button>
+                    <div style={{ marginTop: 6, fontSize: 10, color: C.inkFaint, textAlign: "center" }}>
+                      Printable report · Ready to share with your accountant
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1127,7 +1788,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
               const meta = CAT_META[cat] || CAT_META["Other"];
               return (
                 <div key={cat} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <span style={{ fontSize: 14, flexShrink: 0 }}>{meta.icon}</span>
+                  <CatIcon category={cat} size={14} />
                   <span style={{ fontSize: 11, color: C.inkLight, flex: 1, lineHeight: 1.3 }}>{cat}</span>
                   <span style={{ fontSize: 12, fontWeight: 700, color: C.ink }}>${amt.toFixed(2)}</span>
                 </div>
@@ -1155,7 +1816,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
 const CHECK_ITEMS = [
   {
     id: "homeoffice",
-    icon: "🏠",
+    iconName: "home",
     title: "Home office deduction",
     desc: "If you work from a dedicated space at home, a portion of rent/mortgage and utilities may be deductible.",
     trigger: a => a.workFromHome,
@@ -1163,7 +1824,7 @@ const CHECK_ITEMS = [
   },
   {
     id: "phone",
-    icon: "📱",
+    iconName: "wrench",
     title: "Phone & internet — business portion",
     desc: "The percentage of your phone and internet bill used for work is deductible. Typically 30–70%.",
     trigger: a => a.usePhone,
@@ -1171,7 +1832,7 @@ const CHECK_ITEMS = [
   },
   {
     id: "mileage",
-    icon: "🚗",
+    iconName: "car",
     title: "Vehicle mileage",
     desc: "Every business mile is worth $0.67 in 2025. Most people forget to track this.",
     trigger: a => a.driveForWork,
@@ -1179,7 +1840,7 @@ const CHECK_ITEMS = [
   },
   {
     id: "software",
-    icon: "💻",
+    iconName: "wrench",
     title: "Software subscriptions",
     desc: "Any software used for your business — design tools, accounting apps, project managers — is fully deductible.",
     trigger: () => true,
@@ -1187,7 +1848,7 @@ const CHECK_ITEMS = [
   },
   {
     id: "meals",
-    icon: "🍽️",
+    iconName: "utensils",
     title: "Business meals",
     desc: "Meals with clients or for business purposes are 50% deductible. Keep the receipt and note who you met.",
     trigger: () => true,
@@ -1195,7 +1856,7 @@ const CHECK_ITEMS = [
   },
   {
     id: "equipment",
-    icon: "🔧",
+    iconName: "wrench",
     title: "Equipment purchases",
     desc: "Computers, cameras, office furniture, tools — anything bought for your business may be fully deductible in year one.",
     trigger: () => true,
@@ -1203,7 +1864,7 @@ const CHECK_ITEMS = [
   },
   {
     id: "startup",
-    icon: "🚀",
+    iconName: "zap",
     title: "Startup costs",
     desc: "If your business launched this year, up to $5,000 in startup expenses are deductible.",
     trigger: a => a.incomeType !== "w2only",
@@ -1211,7 +1872,7 @@ const CHECK_ITEMS = [
   },
   {
     id: "selfemployed_health",
-    icon: "🛡️",
+    iconName: "shield",
     title: "Self-employed health insurance",
     desc: "If you pay your own health insurance and are self-employed, 100% of premiums may be deductible.",
     trigger: a => a.incomeType !== "w2only",
@@ -1230,9 +1891,9 @@ function CheckQuestions({ onDone }) {
       q: "How do you earn income?",
       sub: "This helps us find the right deductions for you",
       options: [
-        { label: "W-2 employee only", value: "w2only", icon: "💼" },
-        { label: "Freelance / 1099 only", value: "1099only", icon: "🧾" },
-        { label: "Both W-2 and freelance", value: "both", icon: "🔀" },
+        { label: "W-2 employee only", value: "w2only", iconName: "briefcase" },
+        { label: "Freelance / 1099 only", value: "1099only", iconName: "receipt" },
+        { label: "Both W-2 and freelance", value: "both", iconName: "file" },
       ],
     },
     {
@@ -1240,8 +1901,8 @@ function CheckQuestions({ onDone }) {
       q: "Do you work from home?",
       sub: "A dedicated workspace — even a corner of a room — may qualify",
       options: [
-        { label: "Yes, I have a home workspace", value: true, icon: "🏠" },
-        { label: "No, I work outside the home", value: false, icon: "🏢" },
+        { label: "Yes, I have a home workspace", value: true, iconName: "home" },
+        { label: "No, I work outside the home", value: false, iconName: "briefcase" },
       ],
     },
     {
@@ -1249,8 +1910,8 @@ function CheckQuestions({ onDone }) {
       q: "Do you use your phone or internet for work?",
       sub: "Business portion of your bill is deductible",
       options: [
-        { label: "Yes, regularly", value: true, icon: "📱" },
-        { label: "No, personal only", value: false, icon: "🚫" },
+        { label: "Yes, regularly", value: true, iconName: "zap" },
+        { label: "No, personal only", value: false, iconName: "file" },
       ],
     },
     {
@@ -1258,8 +1919,8 @@ function CheckQuestions({ onDone }) {
       q: "Do you drive for work?",
       sub: "Client visits, errands, deliveries — every business mile counts",
       options: [
-        { label: "Yes, I drive for work", value: true, icon: "🚗" },
-        { label: "No, I don't drive for work", value: false, icon: "🚶" },
+        { label: "Yes, I drive for work", value: true, iconName: "car" },
+        { label: "No, I don't drive for work", value: false, iconName: "file" },
       ],
     },
   ];
@@ -1324,7 +1985,7 @@ function CheckQuestions({ onDone }) {
               onMouseEnter={e => { e.currentTarget.style.borderColor = C.forest; e.currentTarget.style.background = "rgba(27,94,32,0.03)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = C.creamDeep; e.currentTarget.style.background = C.white; e.currentTarget.style.transform = "none"; }}
             >
-              <span style={{ fontSize: 26, flexShrink: 0 }}>{opt.icon}</span>
+              <Icon name={opt.iconName || "file"} size={22} color={C.inkLight} strokeWidth={1.5} style={{ flexShrink: 0 }} />
               <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>{opt.label}</span>
             </button>
           ))}
@@ -1385,7 +2046,7 @@ function CheckReveal({ answers, onContinue }) {
           background: "rgba(27,94,32,0.1)", borderRadius: 20,
           padding: "5px 14px", marginBottom: 16,
         }}>
-          <span style={{ fontSize: 13 }}>✅</span>
+          <Icon name="checkCircle" size={13} color={C.forest} strokeWidth={2} />
           <span style={{ fontSize: 12, fontWeight: 700, color: C.forest }}>
             {items.length} items found for your situation
           </span>
@@ -1428,7 +2089,7 @@ function CheckReveal({ answers, onContinue }) {
                 display: "flex", alignItems: "center", justifyContent: "center",
                 transition: "all 0.15s",
               }}>
-                {isChecked && <span style={{ color: C.white, fontSize: 12, fontWeight: 700 }}>✓</span>}
+                {isChecked && <Icon name="checkCircle" size={12} color={C.white} strokeWidth={2.5} />}
               </div>
 
               <div style={{ flex: 1 }}>
@@ -1502,7 +2163,7 @@ function Toast({ message, visible }) {
 // ROOT APP — UPDATED ROUTING
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function PreFileApp() {
-  // pages: home | receipt-flow | organizer | check
+  // pages: home | receipt-flow | organizer | check | yearend
   const [page, setPage]             = useState("home");
   const [receiptStep, setReceiptStep] = useState("add");
   const [checkStep, setCheckStep]   = useState("questions"); // questions | loading | reveal
@@ -1568,33 +2229,303 @@ export default function PreFileApp() {
   };
 
   const doExport = () => {
-    // Build CSV
-    const rows = [
-      ["Merchant", "Amount", "Category", "Business %", "Business Amount"],
-      ...receipts.map(r => {
-        const pct = r.businessPct || 100;
-        const bizAmt = ((parseFloat(r.amount) || 0) * pct / 100).toFixed(2);
-        return [
-          `"${r.merchant}"`,
-          parseFloat(r.amount).toFixed(2),
-          `"${r.category}"`,
-          `${pct}%`,
-          bizAmt,
-        ];
-      }),
-      ["", "", "", "TOTAL",
-        receipts.reduce((s, r) => s + ((parseFloat(r.amount)||0) * ((r.businessPct||100)/100)), 0).toFixed(2)
-      ],
+    // ── Helpers ──────────────────────────────────────────────
+    // Convert hex #RRGGBB → XLSX ARGB "FF" + RRGGBB (uppercase, no #)
+    const toArgb = hex => "FF" + hex.replace("#", "").toUpperCase().padEnd(6, "0");
+
+    // Soft pastel: blend hex toward white at 75% opacity
+    const soften = hex => {
+      const h = hex.replace("#", "");
+      const r = Math.round(parseInt(h.slice(0,2),16) * 0.25 + 255 * 0.75);
+      const g = Math.round(parseInt(h.slice(2,4),16) * 0.25 + 255 * 0.75);
+      const b = Math.round(parseInt(h.slice(4,6),16) * 0.25 + 255 * 0.75);
+      return "FF" + [r,g,b].map(n => n.toString(16).padStart(2,"0")).join("").toUpperCase();
+    };
+
+    const cell = (v, opts = {}) => ({ v, t: typeof v === "number" ? "n" : "s", ...opts });
+
+    const applyStyle = (ws, addr, style) => {
+      if (!ws[addr]) ws[addr] = { v: "", t: "s" };
+      ws[addr].s = style;
+    };
+
+    const INK    = "FF1A1A18";
+    const WHITE  = "FFFFFFFF";
+    const CREAM  = "FFFAFAF7";
+    const CREAM2 = "FFF2F0EB";
+    const FOREST = "FF1B5E20";
+
+    const headerStyle = (bg = INK) => ({
+      font:      { bold: true, color: { rgb: WHITE }, name: "Calibri", sz: 10 },
+      fill:      { fgColor: { rgb: bg }, patternType: "solid" },
+      alignment: { horizontal: "center", vertical: "center", wrapText: false },
+      border: {
+        top:    { style: "thin", color: { rgb: "FFD0D0D0" } },
+        bottom: { style: "thin", color: { rgb: "FFD0D0D0" } },
+        left:   { style: "thin", color: { rgb: "FFD0D0D0" } },
+        right:  { style: "thin", color: { rgb: "FFD0D0D0" } },
+      },
+    });
+
+    const dataStyle = (bg, bold = false, align = "left") => ({
+      font:      { bold, color: { rgb: INK }, name: "Calibri", sz: 10 },
+      fill:      { fgColor: { rgb: bg }, patternType: "solid" },
+      alignment: { horizontal: align, vertical: "center", wrapText: true },
+      border: {
+        top:    { style: "thin", color: { rgb: "FFEAEAEA" } },
+        bottom: { style: "thin", color: { rgb: "FFEAEAEA" } },
+        left:   { style: "thin", color: { rgb: "FFEAEAEA" } },
+        right:  { style: "thin", color: { rgb: "FFEAEAEA" } },
+      },
+    });
+
+    const totalStyle = {
+      font:      { bold: true, color: { rgb: WHITE }, name: "Calibri", sz: 11 },
+      fill:      { fgColor: { rgb: FOREST }, patternType: "solid" },
+      alignment: { horizontal: "right", vertical: "center" },
+      border: {
+        top:    { style: "medium", color: { rgb: "FF0D4A10" } },
+        bottom: { style: "medium", color: { rgb: "FF0D4A10" } },
+        left:   { style: "thin",   color: { rgb: "FF0D4A10" } },
+        right:  { style: "thin",   color: { rgb: "FF0D4A10" } },
+      },
+    };
+
+    // ── Sheet 1: RECEIPTS ────────────────────────────────────
+    const COLS_RECEIPTS = ["A","B","C","D","E","F","G","H"];
+    const HDR_RECEIPTS  = [
+      "Date", "Merchant", "Category",
+      "What this covers", "Amount ($)", "Business %", "Business Amount ($)", "Notes / Business purpose"
     ];
-    const csv = rows.map(r => r.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
-    a.download = "PreFile_Tax_Organizer_2025.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast("Tax-ready file downloaded ✓");
+    const NCOLS = HDR_RECEIPTS.length; // 8
+
+    const ws1 = {};
+    const grandTotal = receipts.reduce((s,r) => s + ((parseFloat(r.amount)||0)*((r.businessPct||100)/100)), 0);
+    const preparedDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+
+    // ── Header block rows 1–4 ──────────────────────────────
+    const metaLabelStyle = {
+      font:  { bold: true, color: { rgb: WHITE }, name: "Calibri", sz: 11 },
+      fill:  { fgColor: { rgb: FOREST }, patternType: "solid" },
+      alignment: { horizontal: "left", vertical: "center" },
+    };
+    const metaValueStyle = {
+      font:  { color: { rgb: "FFCCE5CC" }, name: "Calibri", sz: 11 },
+      fill:  { fgColor: { rgb: FOREST }, patternType: "solid" },
+      alignment: { horizontal: "left", vertical: "center" },
+    };
+
+    ws1["!merges"] = [
+      { s:{r:0,c:0}, e:{r:0,c:NCOLS-1} }, // Row 1: app title
+      { s:{r:1,c:1}, e:{r:1,c:NCOLS-1} }, // Row 2: date value
+      { s:{r:2,c:1}, e:{r:2,c:NCOLS-1} }, // Row 3: count value
+      { s:{r:3,c:1}, e:{r:3,c:NCOLS-1} }, // Row 4: total value
+    ];
+
+    // Row 1 — App title banner
+    ws1["A1"] = { v: "PreFile Tax Organizer — Tax Year 2025", t: "s", s: {
+      font:      { bold: true, color: { rgb: WHITE }, name: "Calibri", sz: 13 },
+      fill:      { fgColor: { rgb: FOREST }, patternType: "solid" },
+      alignment: { horizontal: "left", vertical: "center" },
+    }};
+    // Row 2 — Prepared date
+    ws1["A2"] = { v: "Prepared on:", t: "s", s: metaLabelStyle };
+    ws1["B2"] = { v: preparedDate, t: "s", s: metaValueStyle };
+    // Row 3 — Receipt count
+    ws1["A3"] = { v: "Total receipts:", t: "s", s: metaLabelStyle };
+    ws1["B3"] = { v: receipts.length, t: "n", s: metaValueStyle };
+    // Row 4 — Total business amount
+    ws1["A4"] = { v: "Total business amount:", t: "s", s: metaLabelStyle };
+    ws1["B4"] = { v: grandTotal, t: "n", s: { ...metaValueStyle, font: { ...metaValueStyle.font, bold: true, sz: 12 } } };
+    ws1["B4"].z = "$#,##0.00";
+
+    // Fill remaining cells in rows 1-4 with forest green
+    for (let row = 1; row <= 4; row++) {
+      for (let col = 1; col < NCOLS; col++) {
+        const addr = COLS_RECEIPTS[col] + row;
+        if (!ws1[addr]) ws1[addr] = { v: "", t: "s", s: metaLabelStyle };
+      }
+    }
+
+    // ── Column headers row 5 (index 4) ────────────────────
+    HDR_RECEIPTS.forEach((h, ci) => {
+      const addr = COLS_RECEIPTS[ci] + "5";
+      ws1[addr] = { v: h, t: "s", s: headerStyle() };
+    });
+
+    // ── Data rows starting at row 6 (index 5) ─────────────
+    const range1 = { s: { c:0, r:0 }, e: { c: NCOLS-1, r: 4 } };
+
+    receipts.forEach((r, i) => {
+      const rowNum  = i + 6;
+      const pct     = r.businessPct || 100;
+      const amt     = parseFloat(r.amount) || 0;
+      const bizAmt  = amt * pct / 100;
+      const catMeta = CAT_META[r.category] || CAT_META["Other"];
+      const catDef  = CATEGORY_DEFINITIONS[r.category] || "";
+      const bgArgb  = soften(catMeta.color);
+
+      const rowData = [
+        r.date || "",
+        r.merchant,
+        r.category,
+        catDef,
+        amt,
+        pct / 100,
+        bizAmt,
+        "",                    // Notes / business purpose — left blank for user
+      ];
+
+      rowData.forEach((v, ci) => {
+        const addr = COLS_RECEIPTS[ci] + rowNum;
+        const isAmt  = ci === 4 || ci === 6;
+        const isPct  = ci === 5;
+        const isLeft = ci <= 3 || ci === 7;
+        const s = dataStyle(bgArgb, ci === 1, isLeft ? "left" : "right");
+        ws1[addr] = { v, t: typeof v === "number" ? "n" : "s", s };
+        if (isAmt) ws1[addr].z = "$#,##0.00";
+        if (isPct) ws1[addr].z = "0%";
+      });
+
+      if (rowNum > range1.e.r) range1.e.r = rowNum;
+    });
+
+    // ── Total row ──────────────────────────────────────────
+    const totalRow = receipts.length + 6;
+    Array(NCOLS).fill("").forEach((_, ci) => {
+      const addr = COLS_RECEIPTS[ci] + totalRow;
+      ws1[addr] = { v: "", t: "s", s: totalStyle };
+    });
+    ws1["B" + totalRow] = { v: "TOTAL", t: "s", s: { ...totalStyle, alignment: { horizontal: "left", vertical: "center" } }};
+    ws1["G" + totalRow] = { v: grandTotal, t: "n", s: totalStyle };
+    ws1["G" + totalRow].z = "$#,##0.00";
+
+    // ── Disclaimer row ─────────────────────────────────────
+    const discRow = totalRow + 1;
+    ws1["A" + discRow] = {
+      v: "For organization purposes only · Amounts are estimates · Always verify with your tax professional before filing",
+      t: "s",
+      s: {
+        font:      { italic: true, color: { rgb: "FF9A9A97" }, name: "Calibri", sz: 9 },
+        fill:      { fgColor: { rgb: CREAM2 }, patternType: "solid" },
+        alignment: { horizontal: "left", vertical: "center", wrapText: true },
+      },
+    };
+    ws1["!merges"].push({ s:{r:discRow-1,c:0}, e:{r:discRow-1,c:NCOLS-1} });
+
+    range1.e.r = discRow;
+    ws1["!ref"] = XLSX.utils.encode_range(range1);
+    ws1["!cols"] = [
+      { wch: 14 }, // Date
+      { wch: 28 }, // Merchant
+      { wch: 24 }, // Category
+      { wch: 48 }, // Definition
+      { wch: 14 }, // Amount
+      { wch: 12 }, // Business %
+      { wch: 18 }, // Business Amount
+      { wch: 32 }, // Notes
+    ];
+    ws1["!rows"] = [
+      { hpt: 24 }, // Title
+      { hpt: 18 }, // Date
+      { hpt: 18 }, // Count
+      { hpt: 18 }, // Total
+      { hpt: 18 }, // Column headers
+      ...receipts.map(() => ({ hpt: 36 })),
+      { hpt: 18 }, // Total row
+      { hpt: 28 }, // Disclaimer
+    ];
+    // Freeze pane below header block + column headers (row 6)
+    ws1["!freeze"] = { xSplit: 0, ySplit: 5 };
+    // Auto-filter on column header row
+    ws1["!autofilter"] = { ref: `A5:H5` };
+
+    // ── Sheet 2: SUMMARY ─────────────────────────────────────
+    const ws2 = {};
+    ws2["!merges"] = [];
+
+    // Title
+    ws2["A1"] = { v: "PreFile · Expense Summary · Tax Year 2025", t: "s", s: {
+      font:      { bold: true, color: { rgb: WHITE }, name: "Calibri", sz: 12 },
+      fill:      { fgColor: { rgb: FOREST }, patternType: "solid" },
+      alignment: { horizontal: "left", vertical: "center" },
+    }};
+    ws2["!merges"].push({ s:{r:0,c:0}, e:{r:0,c:4} });
+
+    // Summary headers
+    const HDR_SUMMARY = ["Category", "Description", "Total Spent ($)", "% of Total", "Business Amount ($)"];
+    const COLS_SUMMARY = ["A","B","C","D","E"];
+    HDR_SUMMARY.forEach((h, ci) => {
+      ws2[COLS_SUMMARY[ci] + "2"] = { v: h, t: "s", s: headerStyle() };
+    });
+
+    // Build category totals, sorted by business amount descending
+    const catTotals = {};
+    receipts.forEach(r => {
+      const amt    = parseFloat(r.amount) || 0;
+      const bizAmt = amt * ((r.businessPct || 100) / 100);
+      catTotals[r.category] = (catTotals[r.category] || 0) + bizAmt;
+    });
+    const sorted = Object.entries(catTotals).sort((a,b) => b[1] - a[1]);
+    const grandBiz = grandTotal;
+
+    sorted.forEach(([cat, bizAmt], i) => {
+      const rowNum  = i + 3;
+      const catMeta = CAT_META[cat] || CAT_META["Other"];
+      const catDef  = CATEGORY_DEFINITIONS[cat] || "";
+      const pctOfTotal = grandBiz > 0 ? bizAmt / grandBiz : 0;
+      const bgArgb  = soften(catMeta.color);
+
+      const rowData = [
+        cat,
+        catDef,
+        bizAmt,
+        pctOfTotal,
+        bizAmt,
+      ];
+      rowData.forEach((v, ci) => {
+        const addr = COLS_SUMMARY[ci] + rowNum;
+        const isAmt = ci === 2 || ci === 4;
+        const isPct = ci === 3;
+        const s = dataStyle(bgArgb, ci === 0, ci <= 1 ? "left" : "right");
+        ws2[addr] = { v, t: typeof v === "number" ? "n" : "s", s };
+        if (isAmt) ws2[addr].z = "$#,##0.00";
+        if (isPct) ws2[addr].z = "0.0%";
+      });
+    });
+
+    // Grand total row in summary
+    const sumTotalRow = sorted.length + 3;
+    ["TOTAL", "All tracked expenses", grandBiz, 1, grandBiz].forEach((v, ci) => {
+      const addr = COLS_SUMMARY[ci] + sumTotalRow;
+      ws2[addr] = { v, t: typeof v === "number" ? "n" : "s", s: totalStyle };
+      if (ci === 2 || ci === 4) ws2[addr].z = "$#,##0.00";
+      if (ci === 3) ws2[addr].z = "0.0%";
+    });
+
+    // Note row
+    const noteRow = sumTotalRow + 1;
+    ws2["A" + noteRow] = {
+      v: "This summary is for organizational purposes only. Confirm deductibility with your tax professional before filing.",
+      t: "s",
+      s: {
+        font:      { italic: true, color: { rgb: "FF9A9A97" }, name: "Calibri", sz: 9 },
+        fill:      { fgColor: { rgb: CREAM2 }, patternType: "solid" },
+        alignment: { horizontal: "left", wrapText: true },
+      },
+    };
+    ws2["!merges"].push({ s:{r:noteRow-1,c:0}, e:{r:noteRow-1,c:4} });
+
+    ws2["!ref"] = XLSX.utils.encode_range({ s:{c:0,r:0}, e:{c:4,r:noteRow} });
+    ws2["!cols"] = [{ wch: 28 }, { wch: 52 }, { wch: 16 }, { wch: 12 }, { wch: 18 }];
+    ws2["!rows"] = [{ hpt: 22 }, { hpt: 18 }, ...sorted.map(() => ({ hpt: 40 })), { hpt: 18 }, { hpt: 28 }];
+
+    // ── Build & download workbook ────────────────────────────
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws1, "Receipts");
+    XLSX.utils.book_append_sheet(wb, ws2, "Summary");
+    XLSX.writeFile(wb, "PreFile_Tax_Organizer_2025.xlsx");
+    showToast("Color-coded organizer downloaded ✓");
   };
 
   const handleUnlock = () => {
@@ -1607,6 +2538,11 @@ export default function PreFileApp() {
   };
 
   const handlePaywallDismiss = () => setShowPaywall(false);
+
+  // ── Year-End Summary handlers ──
+  const handleGenerateSummary = () => setPage("yearend");
+  const handleSummaryBack     = () => setPage("organizer");
+  const handleSummaryPrint    = () => window.print();
 
   // ── Check flow handlers ──
   const handleCheckStart   = () => { setPage("check"); setCheckStep("questions"); };
@@ -1633,7 +2569,7 @@ export default function PreFileApp() {
       `}</style>
 
       <Nav
-        onLogoClick={() => { setPage("home"); setReceiptStep("add"); setCheckStep("questions"); }}
+        onLogoClick={() => { setPage("home"); setReceiptStep("add"); setCheckStep("questions"); setShowPaywall(false); }}
         receiptCount={receipts.length}
       />
 
@@ -1646,9 +2582,16 @@ export default function PreFileApp() {
         )}
         {page === "receipt-flow" && renderReceiptFlow()}
         {page === "organizer" && (
-          <OrganizerScreen receipts={receipts} onAddAnother={handleAddAnother} isSaved={isSaved} onExport={handleExport} showSavedConfirm={showSavedConfirm} />
+          <OrganizerScreen receipts={receipts} onAddAnother={handleAddAnother} isSaved={isSaved} onExport={handleExport} showSavedConfirm={showSavedConfirm} onGenerateSummary={handleGenerateSummary} />
         )}
         {page === "check" && renderCheckFlow()}
+        {page === "yearend" && (
+          <YearEndSummary
+            receipts={receipts}
+            onBack={handleSummaryBack}
+            onPrint={handleSummaryPrint}
+          />
+        )}
       </main>
 
       <Toast visible={toast.visible} message={toast.message} />
@@ -1664,7 +2607,7 @@ export default function PreFileApp() {
           borderTop: `3px solid ${C.forest}`,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 16 }}>⚠️</span>
+            <Icon name="zap" size={16} color="#FCD34D" strokeWidth={2} />
             <span style={{ fontSize: 13, fontWeight: 600 }}>
               Your receipts are not saved yet
             </span>
@@ -1688,7 +2631,7 @@ export default function PreFileApp() {
 
       {/* Paywall modal */}
       {showPaywall && (
-        <PaywallModal onUnlock={handleUnlock} onDismiss={handlePaywallDismiss} />
+        <PaywallModal onUnlock={handleUnlock} onDismiss={handlePaywallDismiss} receiptCount={receipts.length} />
       )}
     </>
   );
