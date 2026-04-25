@@ -1529,7 +1529,7 @@ function YearEndSummary({ receipts, onBack, onPrint }) {
   );
 }
 
-function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedConfirm, onGenerateSummary, onClearData, onDeleteReceipt }) {
+function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedConfirm, onGenerateSummary, onClearData, onDeleteReceipt, showDownloadMsg }) {
   const total = receipts.reduce((s, r) => s + ((parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100)), 0);
   const byCategory = {};
   receipts.forEach(r => {
@@ -1774,7 +1774,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                   onClick={onExport}
                   style={{ width: "100%", fontSize: 14, padding: "13px" }}
                 >
-                  {isSaved ? "⬇ Download color-coded Excel" : "🔒 Download color-coded Excel"}
+                  "⬇ Download color-coded Excel"
                 </button>
                 <div style={{ marginTop: 8, fontSize: 11, color: C.inkFaint, textAlign: "center" }}>
                   {isSaved
@@ -1782,6 +1782,19 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                     : "Free to try · Pay only to save and export"
                   }
                 </div>
+                {showDownloadMsg && (
+                  <div style={{
+                    marginTop: 10, padding: "10px 14px",
+                    background: "rgba(27,94,32,0.08)",
+                    border: "1px solid rgba(27,94,32,0.2)",
+                    borderRadius: 10, fontSize: 12,
+                    color: C.forestMid, lineHeight: 1.5,
+                    display: "flex", alignItems: "flex-start", gap: 8,
+                  }}>
+                    <span style={{ flexShrink: 0 }}>✓</span>
+                    <span>Downloaded — open in Excel and click <strong>'Enable Editing'</strong> to use filters and formatting.</span>
+                  </div>
+                )}
 
                 {/* Year-End Summary trigger */}
                 {receipts.length > 0 && (
@@ -2215,6 +2228,7 @@ export default function PreFileApp() {
   const [isSaved, setIsSaved]       = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [showSavedConfirm, setShowSavedConfirm] = useState(false);
+  const [showDownloadMsg, setShowDownloadMsg]   = useState(false);
   const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
   // ── Warn before leaving if receipts exist and not saved ──
@@ -2285,12 +2299,11 @@ export default function PreFileApp() {
 
   // ── Export / paywall handlers ──
   const handleExport = () => {
-    if (!isSaved) {
-      showToast("Your tax-ready file is already prepared — save to keep it");
-      setTimeout(() => setShowPaywall(true), 500);
-      return;
-    }
+    // Always export — paywall is for saving/persistence, not for downloading
     doExport();
+    if (!isSaved) {
+      setTimeout(() => setShowPaywall(true), 2000); // offer save after download
+    }
   };
 
   const doExport = () => {
@@ -2590,7 +2603,8 @@ export default function PreFileApp() {
     XLSX.utils.book_append_sheet(wb, ws1, "Receipts");
     XLSX.utils.book_append_sheet(wb, ws2, "Summary");
     XLSX.writeFile(wb, "PreFile_Tax_Organizer_2025.xlsx");
-    showToast("Downloaded ✓ — open in Excel and click 'Enable Editing' to use filters and formatting.");
+    showToast("Color-coded organizer downloaded ✓");
+    setShowDownloadMsg(true);
   };
 
   const handleUnlock = () => {
@@ -2647,7 +2661,7 @@ export default function PreFileApp() {
         )}
         {page === "receipt-flow" && renderReceiptFlow()}
         {page === "organizer" && (
-          <OrganizerScreen receipts={receipts} onAddAnother={handleAddAnother} isSaved={isSaved} onExport={handleExport} showSavedConfirm={showSavedConfirm} onGenerateSummary={handleGenerateSummary} onClearData={handleClearData} onDeleteReceipt={handleDeleteReceipt} />
+          <OrganizerScreen receipts={receipts} onAddAnother={handleAddAnother} isSaved={isSaved} onExport={handleExport} showSavedConfirm={showSavedConfirm} onGenerateSummary={handleGenerateSummary} onClearData={handleClearData} onDeleteReceipt={handleDeleteReceipt} showDownloadMsg={showDownloadMsg} />
         )}
         {page === "check" && renderCheckFlow()}
         {page === "yearend" && (
