@@ -2300,9 +2300,10 @@ export default function PreFileApp() {
   // ── Export / paywall handlers ──
   const handleExport = () => {
     // Always export — paywall is for saving/persistence, not for downloading
-    doExport();
+    try { doExport(); } catch(e) { console.error("Export error:", e); }
+    setShowDownloadMsg(true);
     if (!isSaved) {
-      setTimeout(() => setShowPaywall(true), 2000); // offer save after download
+      setTimeout(() => setShowPaywall(true), 2000);
     }
   };
 
