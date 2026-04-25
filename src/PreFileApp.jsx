@@ -2308,9 +2308,6 @@ export default function PreFileApp() {
       setIsDownloading(false);
       setShowDownloadMsg(true);
     }, 1500);
-    if (!isSaved) {
-      setTimeout(() => setShowPaywall(true), 2000);
-    }
   };
 
   const doExport = () => {
