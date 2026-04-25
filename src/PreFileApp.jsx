@@ -1766,7 +1766,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
 
                 {receipts.length > 0 && (
                   <p style={{ fontSize: 11, color: C.inkFaint, marginBottom: 8, textAlign: "center" }}>
-                    This file is ready — unlock to download
+                    
                   </p>
                 )}
                 <button
@@ -1791,7 +1791,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                     borderRadius: 10, fontSize: 12,
                     color: C.forestMid, lineHeight: 1.5,
                   }}>
-                    ✓ Downloaded — open in Excel and click <strong>'Enable Editing'</strong> to use filters and formatting.
+                    ✓ Downloaded — open in Excel and click 'Enable Editing' to use filters and formatting.
                   </div>
                 )}
 
