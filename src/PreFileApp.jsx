@@ -2299,8 +2299,8 @@ export default function PreFileApp() {
 
   // ── Export / paywall handlers ──
   const handleExport = () => {
-    try { doExport(); } catch(e) { console.error(e); }
     setShowDownloadMsg(true);
+    try { doExport(); } catch(e) { console.error(e); }
     if (!isSaved) {
       setTimeout(() => setShowPaywall(true), 2000);
     }
