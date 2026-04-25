@@ -1529,7 +1529,7 @@ function YearEndSummary({ receipts, onBack, onPrint }) {
   );
 }
 
-function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedConfirm, onGenerateSummary, onClearData }) {
+function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedConfirm, onGenerateSummary, onClearData, onDeleteReceipt }) {
   const total = receipts.reduce((s, r) => s + ((parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100)), 0);
   const byCategory = {};
   receipts.forEach(r => {
@@ -1629,8 +1629,24 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
             {receipts.map((r, i) => (
-              <div key={r.id} className="receipt-row" style={{ animationDelay: `${i * 60}ms` }}>
+              <div key={r.id} className="receipt-row" style={{ animationDelay: `${i * 60}ms`, position: "relative" }}>
                 <MiniReceiptCard receipt={r} />
+                <button
+                  onClick={() => {
+                    if (window.confirm("Delete this receipt?")) onDeleteReceipt(r.id);
+                  }}
+                  title="Delete receipt"
+                  style={{
+                    position: "absolute", top: 8, right: 8,
+                    background: "none", border: "none", cursor: "pointer",
+                    color: C.inkFaint, fontSize: 13, lineHeight: 1,
+                    padding: "2px 5px", borderRadius: 5,
+                    fontFamily: "'DM Sans', sans-serif",
+                    transition: "color 0.15s, background 0.15s",
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = C.red; e.currentTarget.style.background = "rgba(198,40,40,0.07)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = C.inkFaint; e.currentTarget.style.background = "none"; }}
+                >✕</button>
               </div>
             ))}
           </div>
@@ -2242,6 +2258,10 @@ export default function PreFileApp() {
   const handleEdit      = () => setReceiptStep("edit");
   const handleSaveEdit  = u => { setPendingReceipt(u); setReceiptStep("confirm"); };
   const handleAddAnother = () => { setPage("receipt-flow"); setReceiptStep("add"); };
+  const handleDeleteReceipt = id => {
+    setReceipts(prev => prev.filter(r => r.id !== id));
+  };
+
   const handleClearData  = () => {
     if (!window.confirm("Clear all receipts? This cannot be undone.")) return;
     localStorage.removeItem("prefile_receipts");
@@ -2625,7 +2645,7 @@ export default function PreFileApp() {
         )}
         {page === "receipt-flow" && renderReceiptFlow()}
         {page === "organizer" && (
-          <OrganizerScreen receipts={receipts} onAddAnother={handleAddAnother} isSaved={isSaved} onExport={handleExport} showSavedConfirm={showSavedConfirm} onGenerateSummary={handleGenerateSummary} onClearData={handleClearData} />
+          <OrganizerScreen receipts={receipts} onAddAnother={handleAddAnother} isSaved={isSaved} onExport={handleExport} showSavedConfirm={showSavedConfirm} onGenerateSummary={handleGenerateSummary} onClearData={handleClearData} onDeleteReceipt={handleDeleteReceipt} />
         )}
         {page === "check" && renderCheckFlow()}
         {page === "yearend" && (
