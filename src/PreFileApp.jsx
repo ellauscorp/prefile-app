@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import * as XLSX from "xlsx-js-style";
+import * as XLSX from "xlsx";
 
 // ─── DESIGN TOKENS ───────────────────────────────────────────────────────────
 const C = {
@@ -2590,7 +2590,7 @@ export default function PreFileApp() {
     XLSX.utils.book_append_sheet(wb, ws1, "Receipts");
     XLSX.utils.book_append_sheet(wb, ws2, "Summary");
     XLSX.writeFile(wb, "PreFile_Tax_Organizer_2025.xlsx");
-    showToast("Color-coded organizer downloaded ✓");
+    showToast("Downloaded ✓ — open in Excel and click 'Enable Editing' to use filters and formatting.");
   };
 
   const handleUnlock = () => {
