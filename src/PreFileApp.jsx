@@ -1633,18 +1633,20 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                 <MiniReceiptCard receipt={r} />
                 <button
                   onClick={() => {
-                    if (window.confirm("Delete this receipt?")) onDeleteReceipt(r.id);
+                    if (window.confirm("Delete this receipt?")) {
+                      onDeleteReceipt(r.id);
+                    }
                   }}
                   title="Delete receipt"
                   style={{
                     position: "absolute", top: 8, right: 8,
                     background: "none", border: "none", cursor: "pointer",
-                    color: C.inkFaint, fontSize: 13, lineHeight: 1,
-                    padding: "2px 5px", borderRadius: 5,
+                    color: C.inkFaint, fontSize: 14, lineHeight: 1,
+                    padding: "2px 6px", borderRadius: 5,
                     fontFamily: "'DM Sans', sans-serif",
                     transition: "color 0.15s, background 0.15s",
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.color = C.red; e.currentTarget.style.background = "rgba(198,40,40,0.07)"; }}
+                  onMouseEnter={e => { e.currentTarget.style.color = C.ink; e.currentTarget.style.background = C.creamDark; }}
                   onMouseLeave={e => { e.currentTarget.style.color = C.inkFaint; e.currentTarget.style.background = "none"; }}
                 >✕</button>
               </div>
@@ -2258,7 +2260,7 @@ export default function PreFileApp() {
   const handleEdit      = () => setReceiptStep("edit");
   const handleSaveEdit  = u => { setPendingReceipt(u); setReceiptStep("confirm"); };
   const handleAddAnother = () => { setPage("receipt-flow"); setReceiptStep("add"); };
-  const handleDeleteReceipt = id => {
+  const handleDeleteReceipt = (id) => {
     setReceipts(prev => prev.filter(r => r.id !== id));
   };
 
