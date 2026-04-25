@@ -1774,7 +1774,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                   onClick={onExport}
                   style={{ width: "100%", fontSize: 14, padding: "13px" }}
                 >
-                  "⬇ Download color-coded Excel"
+                  ⬇ Download color-coded Excel
                 </button>
                 <div style={{ marginTop: 8, fontSize: 11, color: C.inkFaint, textAlign: "center" }}>
                   {isSaved
@@ -2299,8 +2299,7 @@ export default function PreFileApp() {
 
   // ── Export / paywall handlers ──
   const handleExport = () => {
-    // Always export — paywall is for saving/persistence, not for downloading
-    try { doExport(); } catch(e) { console.error("Export error:", e); }
+    try { doExport(); } catch(e) { console.error(e); }
     setShowDownloadMsg(true);
     if (!isSaved) {
       setTimeout(() => setShowPaywall(true), 2000);
