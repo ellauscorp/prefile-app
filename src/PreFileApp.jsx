@@ -1641,13 +1641,13 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                   style={{
                     position: "absolute", top: 8, right: 8,
                     background: "none", border: "none", cursor: "pointer",
-                    color: C.inkFaint, fontSize: 14, lineHeight: 1,
+                    color: C.inkLight, fontSize: 14, lineHeight: 1,
                     padding: "2px 6px", borderRadius: 5,
                     fontFamily: "'DM Sans', sans-serif",
                     transition: "color 0.15s, background 0.15s",
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.color = C.ink; e.currentTarget.style.background = C.creamDark; }}
-                  onMouseLeave={e => { e.currentTarget.style.color = C.inkFaint; e.currentTarget.style.background = "none"; }}
+                  onMouseEnter={e => { e.currentTarget.style.color = C.red; e.currentTarget.style.background = "rgba(198,40,40,0.08)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = C.inkLight; e.currentTarget.style.background = "none"; }}
                 >✕</button>
               </div>
             ))}
