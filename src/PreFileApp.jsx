@@ -1782,19 +1782,15 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                     : "Free to try · Pay only to save and export"
                   }
                 </div>
-                {showDownloadMsg && (
-                  <div style={{
+                <div style={{
                     marginTop: 10, padding: "10px 14px",
                     background: "rgba(27,94,32,0.08)",
                     border: "1px solid rgba(27,94,32,0.2)",
                     borderRadius: 10, fontSize: 12,
                     color: C.forestMid, lineHeight: 1.5,
-                    display: "flex", alignItems: "flex-start", gap: 8,
                   }}>
-                    <span style={{ flexShrink: 0 }}>✓</span>
-                    <span>Downloaded — open in Excel and click <strong>'Enable Editing'</strong> to use filters and formatting.</span>
-                  </div>
-                )}
+                  ✓ After downloading — open in Excel and click <strong>'Enable Editing'</strong> to use filters and formatting.
+                </div>
 
                 {/* Year-End Summary trigger */}
                 {receipts.length > 0 && (
@@ -2299,10 +2295,10 @@ export default function PreFileApp() {
 
   // ── Export / paywall handlers ──
   const handleExport = () => {
-    setShowDownloadMsg(true);
-    try { doExport(); } catch(e) { console.error(e); }
+    // Always export — paywall is for saving/persistence, not for downloading
+    doExport();
     if (!isSaved) {
-      setTimeout(() => setShowPaywall(true), 2000);
+      setTimeout(() => setShowPaywall(true), 2000); // offer save after download
     }
   };
 
