@@ -1790,10 +1790,8 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                     border: "1px solid rgba(27,94,32,0.2)",
                     borderRadius: 10, fontSize: 12,
                     color: C.forestMid, lineHeight: 1.5,
-                    display: "flex", alignItems: "flex-start", gap: 8,
                   }}>
-                    <span style={{ flexShrink: 0 }}>✓</span>
-                    <span>Downloaded — open in Excel and click <strong>'Enable Editing'</strong> to use filters and formatting.</span>
+                    ✓ Downloaded — open in Excel and click <strong>'Enable Editing'</strong> to use filters and formatting.
                   </div>
                 )}
 
