@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 
 // ─── DESIGN TOKENS ───────────────────────────────────────────────────────────
 const C = {
