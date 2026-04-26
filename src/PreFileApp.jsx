@@ -1140,8 +1140,11 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
           onClick={onUnlock}
           style={{ width: "100%", fontSize: 15, padding: "14px", marginBottom: 6 }}
         >
-          Unlock My File
+          Download My Tax File — $12
         </button>
+        <div style={{ fontSize: 12, color: C.inkLight, textAlign: "center", marginBottom: 4 }}>
+          This will download your fully organized, tax-ready Excel file.
+        </div>
         <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginBottom: 12 }}>
           One-time payment · No subscription
         </div>
