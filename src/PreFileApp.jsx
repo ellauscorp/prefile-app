@@ -1,4 +1,15 @@
 import { useState, useEffect, useRef } from "react";
+
+function logEvent(event, data = {}) {
+  const entry = { event, data, timestamp: new Date().toISOString() };
+  console.log(event, data);
+  try {
+    const existing = JSON.parse(localStorage.getItem("pf_events") || "[]");
+    existing.push(entry);
+    localStorage.setItem("pf_events", JSON.stringify(existing));
+  } catch (e) {}
+}
+
 import * as XLSX from "xlsx-js-style";
 
 // ─── DESIGN TOKENS ───────────────────────────────────────────────────────────
@@ -503,7 +514,10 @@ function Homepage({ onStart, onCheck }) {
               opacity: vis ? 1 : 0, transform: vis ? "none" : "translateY(20px)",
               transition: "opacity 0.5s 0.14s, transform 0.5s 0.14s",
             }}>
-              Organize your receipts before you file — avoid missing deductions, reduce stress, and download a clean tax-ready file.
+              Stop scrambling at tax time — organize your receipts in minutes into a file your accountant can actually use.
+            </p>
+            <p style={{ fontSize: 12, color: C.inkFaint, marginBottom: 0, marginTop: 6 }}>
+              Built for freelancers, small business owners, and side hustlers
             </p>
 
             <div style={{
@@ -511,7 +525,7 @@ function Homepage({ onStart, onCheck }) {
               opacity: vis ? 1 : 0, transform: vis ? "none" : "translateY(20px)",
               transition: "opacity 0.5s 0.21s, transform 0.5s 0.21s",
             }}>
-              <button className="pf-btn-primary" onClick={onStart} style={{ width: "100%", fontSize: 16, padding: "16px 28px" }}>
+              <button className="pf-btn-primary" onClick={() => { logEvent("CTA_START_CLICKED"); onStart(); }} style={{ width: "100%", fontSize: 16, padding: "16px 28px" }}>
                 Organize my receipts →
               </button>
               <div>
@@ -653,7 +667,7 @@ function Homepage({ onStart, onCheck }) {
         <p style={{ color:"rgba(255,255,255,0.65)", fontSize:15, marginBottom:30, maxWidth:380, margin:"0 auto 30px" }}>
           No account needed. Start adding receipts in seconds.
         </p>
-        <button className="pf-btn-primary" onClick={onStart} style={{ background:C.white, color:C.forest, boxShadow:"0 4px 20px rgba(0,0,0,0.18)", margin:"0 auto", padding:"16px 36px", fontSize:16 }}>
+        <button className="pf-btn-primary" onClick={() => { logEvent("CTA_START_CLICKED"); onStart(); }} style={{ background:C.white, color:C.forest, boxShadow:"0 4px 20px rgba(0,0,0,0.18)", margin:"0 auto", padding:"16px 36px", fontSize:16 }}>
           Organize my receipts →
         </button>
         <div style={{ marginTop:18, fontSize:11, color:"rgba(255,255,255,0.4)" }}>
@@ -1042,7 +1056,7 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
           Your tax-ready file is ready
         </h2>
         <p style={{ fontSize: 13, color: C.inkLight, lineHeight: 1.6, marginBottom: 18 }}>
-          We've already organized and formatted everything — download it instantly.
+          This will download your fully organized, color-coded Excel file — ready to send to your accountant. No more last-minute scrambling or missed deductions.
         </p>
 
         {/* Value stack */}
@@ -1143,10 +1157,13 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
           Download My Tax File — $12
         </button>
         <div style={{ fontSize: 12, color: C.inkLight, textAlign: "center", marginBottom: 4 }}>
-          This will download your fully organized, tax-ready Excel file.
+          This is your complete report with all receipts, categories, and totals.
         </div>
         <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginBottom: 12 }}>
           One-time payment · No subscription
+        </div>
+        <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
+          Used by freelancers and small business owners to get organized before filing — especially during tax season.
         </div>
 
         <button
@@ -1161,6 +1178,9 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
         <div style={{ fontSize: 10, color: C.inkFaint, textAlign: "center", lineHeight: 1.6 }}>
           Used by freelancers and small business owners<br />
           PreFile is an organizational tool · Not tax advice
+        </div>
+        <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 10 }}>
+          You can download now and decide later — no commitment.
         </div>
       </div>
     </div>
@@ -2608,6 +2628,7 @@ export default function PreFileApp() {
     XLSX.utils.book_append_sheet(wb, ws1, "Receipts");
     XLSX.utils.book_append_sheet(wb, ws2, "Summary");
     XLSX.writeFile(wb, "PreFile_Tax_Organizer_2025.xlsx");
+    logEvent("EXPORT_COMPLETED", { count: receipts.length });
     showToast("Color-coded organizer downloaded ✓");
     setShowDownloadMsg(true);
   };
@@ -2622,11 +2643,11 @@ export default function PreFileApp() {
   };
 
   const handlePaywallDismiss = () => {
-    console.log("PAYWALL_DISMISSED");
+    logEvent("PAYWALL_DISMISSED");
     const reason = prompt(
       "Quick question — what made you not download right now?\n\nYou can just type a number or a few words:\n\n1. Too expensive\n2. Not needed\n3. Just testing\n4. Something unclear\n\nOr tell me in your own words:"
     );
-    console.log("PAYWALL_REASON", reason?.trim() || "dismissed_no_response");
+    logEvent("PAYWALL_REASON", { reason: reason?.trim() || "dismissed_no_response" });
     setShowPaywall(false);
   };
 
@@ -2707,7 +2728,7 @@ export default function PreFileApp() {
             </span>
           </div>
           <button
-            onClick={() => setShowPaywall(true)}
+            onClick={() => { logEvent("PAYWALL_VIEWED", { count: receipts.length }); setShowPaywall(true); }}
             style={{
               background: C.forest, color: C.white, border: "none",
               borderRadius: 9, padding: "8px 16px", fontSize: 12,
