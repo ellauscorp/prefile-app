@@ -1684,10 +1684,10 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, fontFamily: "'Fraunces', serif" }}>
-                    Preview of your tax-ready file
+                    Preview your tax-ready file
                   </div>
                   <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 3 }}>
-                    This is exactly what gets sent to your accountant
+                    This is what your exported file will look like
                   </div>
                 </div>
                 <span style={{ fontSize: 20 }}>📊</span>
@@ -1778,13 +1778,10 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                   {isDownloading ? "Downloading..." : "⬇ Download color-coded Excel"}
                 </button>
                 <div style={{ marginTop: 8, fontSize: 11, color: C.inkFaint, textAlign: "center" }}>
-                  Download a clean, categorized file ready to send to your accountant.
-                </div>
-                <div style={{ marginTop: 6, fontSize: 11, color: C.inkFaint, textAlign: "center" }}>
-                  Your data stays on your device — nothing is uploaded or stored.
-                </div>
-                <div style={{ marginTop: 4, fontSize: 11, color: C.inkFaint, textAlign: "center", fontStyle: "italic" }}>
-                  Most people use this right before tax season.
+                  {isSaved
+                    ? "Your receipts are saved · Export ready"
+                    : "Free to try · Pay only to save and export"
+                  }
                 </div>
                 {showDownloadMsg && (
                   <div style={{
@@ -2621,7 +2618,14 @@ export default function PreFileApp() {
     setTimeout(() => doExport(), 600);
   };
 
-  const handlePaywallDismiss = () => setShowPaywall(false);
+  const handlePaywallDismiss = () => {
+    console.log("PAYWALL_DISMISSED");
+    const reason = prompt(
+      "Quick question — what made you not download right now?\n\nYou can just type a number or a few words:\n\n1. Too expensive\n2. Not needed\n3. Just testing\n4. Something unclear\n\nOr tell me in your own words:"
+    );
+    console.log("PAYWALL_REASON", reason?.trim() || "dismissed_no_response");
+    setShowPaywall(false);
+  };
 
   // ── Year-End Summary handlers ──
   const handleGenerateSummary = () => setPage("yearend");
