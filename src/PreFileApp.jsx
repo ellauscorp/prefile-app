@@ -1684,10 +1684,10 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, fontFamily: "'Fraunces', serif" }}>
-                    Preview your tax-ready file
+                    Preview of your tax-ready file
                   </div>
                   <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 3 }}>
-                    This is what your exported file will look like
+                    This is exactly what gets sent to your accountant
                   </div>
                 </div>
                 <span style={{ fontSize: 20 }}>📊</span>
@@ -1778,10 +1778,13 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                   {isDownloading ? "Downloading..." : "⬇ Download color-coded Excel"}
                 </button>
                 <div style={{ marginTop: 8, fontSize: 11, color: C.inkFaint, textAlign: "center" }}>
-                  {isSaved
-                    ? "Your receipts are saved · Export ready"
-                    : "Free to try · Pay only to save and export"
-                  }
+                  Download a clean, categorized file ready to send to your accountant.
+                </div>
+                <div style={{ marginTop: 6, fontSize: 11, color: C.inkFaint, textAlign: "center" }}>
+                  Your data stays on your device — nothing is uploaded or stored.
+                </div>
+                <div style={{ marginTop: 4, fontSize: 11, color: C.inkFaint, textAlign: "center", fontStyle: "italic" }}>
+                  Most people use this right before tax season.
                 </div>
                 {showDownloadMsg && (
                   <div style={{
