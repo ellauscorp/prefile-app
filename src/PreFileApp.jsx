@@ -53,6 +53,7 @@ const CATEGORY_DEFINITIONS = {
 };
 
 const PAYWALL_COPY_VARIANT = "A"; // change to "B" to test
+const LOSS_LINE_VARIANT    = "A"; // "A" = current, "B" = tighter version
 
 
 // ─── SVG ICON SYSTEM ─────────────────────────────────────────────────────────
@@ -1056,8 +1057,14 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
           Your tax-ready file is ready
         </h2>
         <p style={{ fontSize: 13, color: C.inkLight, lineHeight: 1.6, marginBottom: 18 }}>
-          This will download your fully organized, color-coded Excel file — ready to send to your accountant. No more last-minute scrambling or missed deductions.
+          This turns your receipts into a clean, accountant-ready Excel file your accountant can actually use — no formatting, no scrambling.
         </p>
+        <div style={{ fontSize: 12, color: C.inkLight, marginTop: 6 }}>
+          {LOSS_LINE_VARIANT === "A"
+            ? "You've already organized everything — download your file so you don't lose it."
+            : "You've already organized everything — don't lose it now."
+          }
+        </div>
 
         {/* Value stack */}
         <div style={{ marginBottom: 6 }}>
@@ -1158,6 +1165,9 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
         </button>
         <div style={{ fontSize: 12, color: C.inkLight, textAlign: "center", marginBottom: 4 }}>
           This is your complete report with all receipts, categories, and totals.
+        </div>
+        <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
+          We don't store or transmit your receipts — everything stays on your device.
         </div>
         <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginBottom: 12 }}>
           One-time payment · No subscription
@@ -1711,6 +1721,9 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                   </div>
                   <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 3 }}>
                     This is what your exported file will look like
+                  </div>
+                  <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 4 }}>
+                    This is exactly how your downloaded Excel file will look.
                   </div>
                 </div>
                 <span style={{ fontSize: 20 }}>📊</span>
