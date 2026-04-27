@@ -1054,11 +1054,14 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
           fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 700,
           color: C.ink, letterSpacing: "-0.3px", marginBottom: 6,
         }}>
-          Your tax-ready file is ready
+          Your tax-ready file is ready to send
         </h2>
         <p style={{ fontSize: 13, color: C.inkLight, lineHeight: 1.6, marginBottom: 18 }}>
-          This turns your receipts into a clean, accountant-ready Excel file your accountant can actually use — no formatting, no scrambling.
+          This gives you a clean, accountant-ready Excel file you can send immediately — no formatting, no back-and-forth.
         </p>
+        <div style={{ fontSize: 12, color: C.inkFaint, marginTop: 6 }}>
+          Cheaper than one hour of your accountant's time.
+        </div>
         <div style={{ fontSize: 12, color: C.inkLight, marginTop: 6 }}>
           {LOSS_LINE_VARIANT === "A"
             ? "You've already organized everything — download your file so you don't lose it."
@@ -1082,6 +1085,9 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
           <p style={{ fontSize: 11, color: C.inkFaint, marginTop: 10, marginBottom: 0, lineHeight: 1.5 }}>
             Everything you enter is saved — your file is always ready to download.
           </p>
+        </div>
+        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 6 }}>
+          Works with TurboTax, H&amp;R Block, or your accountant
         </div>
 
         {/* Spreadsheet preview */}
@@ -1158,10 +1164,10 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
         {/* Primary CTA */}
         <button
           className="pf-btn-primary"
-          onClick={onUnlock}
+          onClick={() => { logEvent("PAY_CLICKED", { count: receiptCount }); onUnlock(); }}
           style={{ width: "100%", fontSize: 15, padding: "14px", marginBottom: 6 }}
         >
-          Download My Tax File — $12
+          Get my tax-ready file instantly — $12
         </button>
         <div style={{ fontSize: 12, color: C.inkLight, textAlign: "center", marginBottom: 4 }}>
           This is your complete report with all receipts, categories, and totals.
@@ -1807,12 +1813,15 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                 )}
                 <button
                   className="pf-btn-primary"
-                  onClick={onExport}
+                  onClick={() => { logEvent("PAYWALL_VIEWED", { count: receipts.length }); logEvent("PAYWALL_SHOWN", { count: receipts.length }); setShowPaywall(true); }}
                   disabled={isDownloading}
                   style={{ width: "100%", fontSize: 14, padding: "13px", opacity: isDownloading ? 0.75 : 1, transition: "opacity 0.2s" }}
                 >
-                  {isDownloading ? "Downloading..." : "⬇ Download color-coded Excel"}
+                  {isDownloading ? "Downloading..." : "Get my tax-ready file"}
                 </button>
+                <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
+                  Start free — only pay if you download
+                </div>
                 <div style={{ marginTop: 8, fontSize: 11, color: C.inkFaint, textAlign: "center" }}>
                   {isSaved
                     ? "Your receipts are saved · Export ready"
@@ -2656,7 +2665,7 @@ export default function PreFileApp() {
   };
 
   const handlePaywallDismiss = () => {
-    logEvent("PAYWALL_DISMISSED");
+    logEvent("PAYWALL_DISMISSED", { count: receipts.length });
     const reason = prompt(
       "Quick question — what made you not download right now?\n\nYou can just type a number or a few words:\n\n1. Too expensive\n2. Not needed\n3. Just testing\n4. Something unclear\n\nOr tell me in your own words:"
     );
