@@ -55,6 +55,30 @@ const CATEGORY_DEFINITIONS = {
 const PAYWALL_COPY_VARIANT = "A"; // change to "B" to test
 const LOSS_LINE_VARIANT    = "A"; // "A" = current, "B" = tighter version
 
+// ─── LEGAL CONSTANTS ────────────────────────────────────────────────────────
+export const PREFILE_DISCLAIMER = "PreFile is an organizational tool designed to help you collect and structure financial information before filing taxes. It does not provide tax, legal, or financial advice, and does not determine the accuracy or tax treatment of any information. All data, categorizations, and outputs should be reviewed and confirmed by you and/or a qualified tax professional before being used for tax filing or reporting purposes.";
+
+export const PREFILE_SHORT_DISCLAIMER = "For organization and review only — not tax advice. Confirm with a qualified tax professional.";
+
+export const PREFILE_POSITIONING = "PreFile helps you organize your financial information before filing taxes — so you can review everything clearly and work more efficiently with your tax professional.";
+
+export const PREFILE_USER_RESPONSIBILITY = "You are responsible for reviewing all entries and confirming their accuracy with a qualified tax professional before filing.";
+
+// Reusable footer disclaimer block — drop into any screen
+function DisclaimerFooter({ compact = false }) {
+  return (
+    <div style={{
+      maxWidth: 720, margin: "32px auto 0", padding: "16px 24px",
+      borderTop: `1px solid ${C.creamDeep}`,
+      fontSize: compact ? 10 : 11, color: C.inkFaint,
+      lineHeight: 1.6, textAlign: "center",
+      fontFamily: "'DM Sans', sans-serif",
+    }}>
+      {PREFILE_SHORT_DISCLAIMER}
+    </div>
+  );
+}
+
 
 // ─── SVG ICON SYSTEM ─────────────────────────────────────────────────────────
 // All icons: stroke-based, 24×24 viewBox, no fill, Stripe/Linear style
@@ -122,7 +146,7 @@ const CAT_ICON = {
   "Other":                    "file",
 };
 
-// Render a category icon as SVG (replaces emoji meta.icon renders)
+// Render a category icon as SVG (single source of truth — no emoji fallback)
 const CatIcon = ({ category, size = 14, color }) => {
   const meta = CAT_META[category] || CAT_META["Other"];
   const iconName = CAT_ICON[category] || "file";
@@ -459,7 +483,7 @@ function TotalsSidebar({ receipts }) {
         const meta = CAT_META[cat] || CAT_META["Other"];
         return (
           <div key={cat} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <span style={{ fontSize: 14 }}>{meta.icon}</span>
+            <CatIcon category={cat} size={14} color={meta.color} />
             <span style={{ fontSize: 12, color: C.inkLight, flex: 1 }}>{cat}</span>
             <span style={{ fontSize: 12, fontWeight: 700, color: C.ink }}>${amt.toFixed(2)}</span>
           </div>
@@ -507,7 +531,7 @@ function Homepage({ onStart, onCheck }) {
               transition: "opacity 0.5s 0.07s, transform 0.5s 0.07s",
             }}>
               Turn your messy receipts into a{" "}
-              <em style={{ color: C.forest, fontStyle: "italic" }}>clean, tax-ready file</em>
+              <em style={{ color: C.forest, fontStyle: "italic" }}>clean, organized file for review</em>
             </h1>
 
             <p style={{
@@ -515,7 +539,7 @@ function Homepage({ onStart, onCheck }) {
               opacity: vis ? 1 : 0, transform: vis ? "none" : "translateY(20px)",
               transition: "opacity 0.5s 0.14s, transform 0.5s 0.14s",
             }}>
-              Stop scrambling at tax time — organize your receipts in minutes into a file your accountant can actually use.
+              Stop scrambling at tax time — organize your receipts in minutes into a file prepared for review by your tax professional.
             </p>
             <p style={{ fontSize: 12, color: C.inkFaint, marginBottom: 0, marginTop: 6 }}>
               Built for freelancers, small business owners, and side hustlers
@@ -596,12 +620,15 @@ function Homepage({ onStart, onCheck }) {
           <div style={{ textAlign: "center", marginBottom: 44 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: C.forestLight, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>How it works</div>
             <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: "clamp(24px, 4vw, 36px)", fontWeight: 700, color: C.white, letterSpacing: "-0.4px" }}>Three steps, two minutes</h2>
+            <p style={{ fontSize: 14, color: "rgba(255,255,255,0.65)", marginTop: 12, maxWidth: 560, lineHeight: 1.6 }}>
+              {PREFILE_POSITIONING}
+            </p>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 20 }}>
             {[
               { n:"01", iconName:"receipt", title:"Add your receipts", body:"Photograph, upload, or type in any receipt — meals, software, shipping, phone bills." },
               { n:"02", iconName:"clipboard", title:"PreFile suggests a category", body:"We match common merchants automatically. You confirm or change — you always decide." },
-              { n:"03", iconName:"download", title:"Download your organizer", body:"A clean, color-coded file organized by category — ready for your tax professional." },
+              { n:"03", iconName:"download", title:"Download your organizer", body:"A clean, color-coded file organized by category — prepared for review by your tax professional." },
             ].map((s, i) => (
               <div key={i} style={{ background:"rgba(255,255,255,0.05)", borderRadius:16, padding:"26px 22px", border:"1px solid rgba(255,255,255,0.08)" }}>
                 <div style={{ fontSize:11, fontWeight:700, color:C.forestLight, letterSpacing:"0.1em", marginBottom:10 }}>{s.n}</div>
@@ -675,6 +702,7 @@ function Homepage({ onStart, onCheck }) {
           PreFile is an organizational tool — not tax advice. Always verify with your tax professional.
         </div>
       </section>
+      <DisclaimerFooter />
     </div>
   );
 }
@@ -748,6 +776,7 @@ function AddReceiptScreen({ onMethod, isMobile }) {
       <div style={{ marginTop:20, fontSize:11, color:C.inkFaint, textAlign:"center" }}>
         You decide what is deductible · PreFile organizes — not tax advice
       </div>
+      <DisclaimerFooter compact />
     </div>
   );
 }
@@ -796,7 +825,7 @@ function ProcessingScreen({ method, onExtracted }) {
         <div className="pf-label">Step 2 of 3</div>
         <div className="progress-bar"><div className="progress-fill" style={{ width:"66%" }} /></div>
         <h2 style={{ fontFamily:"'Fraunces', serif", fontSize:26, fontWeight:700, color:C.ink, letterSpacing:"-0.3px", marginBottom:6 }}>Enter receipt details</h2>
-        <p style={{ fontSize:13, color:C.inkLight }}>Fill in what you know — category is auto-suggested</p>
+        <p style={{ fontSize:13, color:C.inkLight }}>Fill in what you know — we'll suggest a category for you to review</p>
       </div>
 
       <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
@@ -810,7 +839,7 @@ function ProcessingScreen({ method, onExtracted }) {
             }} />
           {manualData.merchant && !manualData.category && (
             <div style={{ fontSize:11, color:C.forest, marginTop:4 }}>
-              Suggested: {suggestCategory(manualData.merchant)}
+              Suggested based on common patterns (please review): {suggestCategory(manualData.merchant)}
             </div>
           )}
         </div>
@@ -832,7 +861,7 @@ function ProcessingScreen({ method, onExtracted }) {
           <div className="pf-label">Category</div>
           <select className="pf-select" value={manualData.category || suggestCategory(manualData.merchant)}
             onChange={e => setManualData(d => ({ ...d, category: e.target.value }))}>
-            {CATEGORIES.map(c => <option key={c} value={c}>{(CAT_META[c]?.icon || "📄") + " " + c}</option>)}
+            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
 
@@ -841,6 +870,7 @@ function ProcessingScreen({ method, onExtracted }) {
           Review receipt →
         </button>
       </div>
+      <DisclaimerFooter compact />
     </div>
   );
 }
@@ -854,17 +884,17 @@ function ConfirmScreen({ receipt, onConfirm, onEdit }) {
         <div className="pf-label">Step 3 of 3</div>
         <div className="progress-bar"><div className="progress-fill" style={{ width:"100%" }} /></div>
         <h2 style={{ fontFamily:"'Fraunces', serif", fontSize:26, fontWeight:700, color:C.ink, letterSpacing:"-0.3px", marginBottom:6 }}>Does this look correct?</h2>
-        <p style={{ fontSize:13, color:C.inkLight }}>Suggested category — confirm or edit</p>
+        <p style={{ fontSize:13, color:C.inkLight }}>Suggested category based on common patterns (please review)</p>
       </div>
 
       <div className="pf-card" style={{ padding:24, marginBottom:20 }}>
         {/* Category badge */}
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:20 }}>
-          <div style={{ width:48, height:48, borderRadius:12, background:meta.color+"18", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>
-            {meta.icon}
+          <div style={{ width:48, height:48, borderRadius:12, background:meta.color+"18", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <CatIcon category={receipt.category} size={22} color={meta.color} />
           </div>
           <div>
-            <div style={{ fontSize:11, color:C.inkFaint, fontWeight:600, marginBottom:2 }}>Suggested category</div>
+            <div style={{ fontSize:11, color:C.inkFaint, fontWeight:600, marginBottom:2 }}>Suggested category based on common patterns (please review)</div>
             <CategoryLabel category={receipt.category} size={14} />
           </div>
         </div>
@@ -892,9 +922,15 @@ function ConfirmScreen({ receipt, onConfirm, onEdit }) {
         </button>
       </div>
 
-      <div style={{ textAlign:"center", fontSize:11, color:C.inkFaint }}>
-        You decide what is deductible · Not tax advice
+      <div style={{
+        textAlign:"center", fontSize:11, color:C.inkFaint,
+        padding:"10px 14px", background:"rgba(212,160,23,0.08)",
+        borderRadius:8, border:"1px solid rgba(212,160,23,0.2)",
+        lineHeight:1.5,
+      }}>
+        {PREFILE_USER_RESPONSIBILITY}
       </div>
+      <DisclaimerFooter compact />
     </div>
   );
 }
@@ -932,7 +968,7 @@ function EditScreen({ receipt, onSave, onCancel }) {
           <div>
             <div className="pf-label">Category</div>
             <select className="pf-select" value={data.category} onChange={e => setData(d => ({ ...d, category: e.target.value }))}>
-              {CATEGORIES.map(c => <option key={c} value={c}>{(CAT_META[c]?.icon || "📄") + " " + c}</option>)}
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
         </div>
@@ -982,6 +1018,7 @@ function EditScreen({ receipt, onSave, onCancel }) {
         <button className="pf-btn-primary" onClick={() => onSave(data)} style={{ flex:2 }}>Save changes →</button>
         <button className="pf-btn-secondary" onClick={onCancel} style={{ flex:1 }}>Cancel</button>
       </div>
+      <DisclaimerFooter compact />
     </div>
   );
 }
@@ -995,7 +1032,7 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
   const valueItems = [
     `${receiptCount} organized receipt${receiptCount !== 1 ? "s" : ""}`,
     "Category breakdown by spend",
-    "Tax-ready formatting",
+    "Clean, reviewable formatting",
     "Plain-English explanations",
     "Notes column for business purpose",
   ];
@@ -1054,10 +1091,10 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
           fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 700,
           color: C.ink, letterSpacing: "-0.3px", marginBottom: 6,
         }}>
-          Your tax-ready file is ready to send
+          Everything organized in one place — so nothing gets missed before filing.
         </h2>
         <p style={{ fontSize: 13, color: C.inkLight, lineHeight: 1.6, marginBottom: 18 }}>
-          This gives you a clean, accountant-ready Excel file you can send immediately — no formatting, no back-and-forth.
+          Get to filing day without the scramble.
         </p>
         <div style={{ fontSize: 12, color: C.inkFaint, marginTop: 6 }}>
           Cheaper than one hour of your accountant's time.
@@ -1167,18 +1204,18 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
           onClick={() => { logEvent("PAY_CLICKED", { count: receiptCount }); onUnlock(); }}
           style={{ width: "100%", fontSize: 15, padding: "14px", marginBottom: 6 }}
         >
-          Get my tax-ready file instantly — $12
+          Get my organized file instantly — $12
         </button>
-        <div style={{ fontSize: 12, color: C.inkLight, textAlign: "center", marginBottom: 4 }}>
-          This is your complete report with all receipts, categories, and totals.
+        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
+          You'll review everything before filing — this just organizes it for you
         </div>
-        <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
+        <div style={{ fontSize: 12, color: C.inkLight, marginTop: 8, textAlign: "center" }}>
+          Your complete, organized report — receipts, categories, and totals in one place
+        </div>
+        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
           We don't store or transmit your receipts — everything stays on your device.
         </div>
-        <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginBottom: 12 }}>
-          One-time payment · No subscription
-        </div>
-        <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
+        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, marginBottom: 12, textAlign: "center" }}>
           Used by freelancers and small business owners to get organized before filing — especially during tax season.
         </div>
 
@@ -1192,11 +1229,16 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
 
         {/* Social proof + legal */}
         <div style={{ fontSize: 10, color: C.inkFaint, textAlign: "center", lineHeight: 1.6 }}>
-          Used by freelancers and small business owners<br />
-          PreFile is an organizational tool · Not tax advice
+          Used by freelancers and small business owners
         </div>
         <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 10 }}>
           You can download now and decide later — no commitment.
+        </div>
+        <div style={{
+          marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.creamDark}`,
+          fontSize: 10, color: C.inkFaint, lineHeight: 1.55, textAlign: "center",
+        }}>
+          {PREFILE_SHORT_DISCLAIMER}
         </div>
       </div>
     </div>
@@ -1569,6 +1611,7 @@ function YearEndSummary({ receipts, onBack, onPrint }) {
 }
 
 function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedConfirm, onGenerateSummary, onClearData, onDeleteReceipt, showDownloadMsg, isDownloading }) {
+  const [confirmed, setConfirmed] = useState(false);
   const total = receipts.reduce((s, r) => s + ((parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100)), 0);
   const byCategory = {};
   receipts.forEach(r => {
@@ -1582,7 +1625,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
   const momentumMsg =
     n === 0 ? null :
     n < 3   ? `${n} receipt${n > 1 ? "s" : ""} organized — keep going` :
-    n < 5   ? "You're building your tax-ready file — save and export everything at the end" :
+    n < 5   ? "You're building your organized file for review — save and export everything at the end" :
               "You're almost done — review everything and download your file";
 
   const momentumColor = n >= 3 ? C.forest : C.inkFaint;
@@ -1617,7 +1660,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
           {/* Value reinforcement */}
           {n > 0 && (
             <p style={{ fontSize: 12, color: C.forestMid, marginTop: 6, fontWeight: 500 }}>
-              Most freelancers miss deductions like these — you're now tracking them correctly
+              Common categories most freelancers track — review with your tax professional to confirm what applies
             </p>
           )}
         </div>
@@ -1723,7 +1766,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, fontFamily: "'Fraunces', serif" }}>
-                    Preview your tax-ready file
+                    Preview your organized file for review
                   </div>
                   <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 3 }}>
                     This is what your exported file will look like
@@ -1782,7 +1825,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                       {[
                         `${receipts.length} organized receipt${receipts.length !== 1 ? "s" : ""}`,
                         "Category breakdown with color coding",
-                        "Tax-ready formatting",
+                        "Clean, reviewable formatting",
                         "Definitions for every category",
                         "Notes column for business purpose",
                       ].map((item, i) => (
@@ -1801,23 +1844,43 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: C.forest, marginBottom: 12 }}>
                       <Icon name="checkCircle" size={14} color={C.forest} strokeWidth={2.2} />
-                      Ready to send to your accountant
+                      Prepared for review by your tax professional
                     </div>
                   </div>
                 )}
 
                 {receipts.length > 0 && (
-                  <p style={{ fontSize: 11, color: C.inkFaint, marginBottom: 8, textAlign: "center" }}>
-                    
-                  </p>
+                  <div style={{
+                    marginBottom: 12, padding: "12px 14px",
+                    background: "rgba(212,160,23,0.08)",
+                    border: "1px solid rgba(212,160,23,0.25)",
+                    borderRadius: 9, fontSize: 12, color: C.ink, lineHeight: 1.55,
+                  }}>
+                    <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={confirmed}
+                        onChange={e => setConfirmed(e.target.checked)}
+                        style={{ marginTop: 3, width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
+                      />
+                      <span>
+                        I confirm I have reviewed all entries and understand this file is for preparation and review purposes only.
+                      </span>
+                    </label>
+                  </div>
                 )}
                 <button
                   className="pf-btn-primary"
                   onClick={() => { logEvent("PAYWALL_VIEWED", { count: receipts.length }); logEvent("PAYWALL_SHOWN", { count: receipts.length }); setShowPaywall(true); }}
-                  disabled={isDownloading}
-                  style={{ width: "100%", fontSize: 14, padding: "13px", opacity: isDownloading ? 0.75 : 1, transition: "opacity 0.2s" }}
+                  disabled={isDownloading || (receipts.length > 0 && !confirmed)}
+                  style={{
+                    width: "100%", fontSize: 14, padding: "13px",
+                    opacity: (isDownloading || (receipts.length > 0 && !confirmed)) ? 0.5 : 1,
+                    transition: "opacity 0.2s",
+                    cursor: (receipts.length > 0 && !confirmed) ? "not-allowed" : "pointer",
+                  }}
                 >
-                  {isDownloading ? "Downloading..." : "Get my tax-ready file"}
+                  {isDownloading ? "Downloading..." : "Download organizer →"}
                 </button>
                 <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
                   Start free — only pay if you download
@@ -1852,7 +1915,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                       Generate Year-End Summary
                     </button>
                     <div style={{ marginTop: 6, fontSize: 10, color: C.inkFaint, textAlign: "center" }}>
-                      Printable report · Ready to share with your accountant
+                      Printable report · Prepared for review by your tax professional
                     </div>
                   </div>
                 )}
@@ -1901,6 +1964,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
         </div>
 
       </div>
+      <DisclaimerFooter />
     </div>
   );
 }
@@ -2645,11 +2709,43 @@ export default function PreFileApp() {
     ws2["!cols"] = [{ wch: 28 }, { wch: 52 }, { wch: 16 }, { wch: 12 }, { wch: 18 }];
     ws2["!rows"] = [{ hpt: 22 }, { hpt: 18 }, ...sorted.map(() => ({ hpt: 40 })), { hpt: 18 }, { hpt: 28 }];
 
+    // ── Build disclaimer / README sheet ──────────────────────
+    const disclaimerSheet = XLSX.utils.aoa_to_sheet([
+      ["PreFile Organizer — For Preparation & Review Only"],
+      [""],
+      ["This document is an organized summary of financial information based on user input and suggested categorization."],
+      ["It is not a completed tax return and should not be used for filing without review."],
+      ["Please confirm all entries with a qualified tax professional before submitting any tax forms."],
+      [""],
+      [PREFILE_DISCLAIMER],
+    ]);
+    // Light styling: bold title, wrapped body, wider column
+    disclaimerSheet["A1"] = {
+      v: "PreFile Organizer — For Preparation & Review Only",
+      t: "s",
+      s: {
+        font: { bold: true, color: { rgb: "FF1B5E20" }, name: "Calibri", sz: 14 },
+        alignment: { horizontal: "left", vertical: "center", wrapText: true },
+      },
+    };
+    [3, 4, 5, 7].forEach(rowNum => {
+      const addr = "A" + rowNum;
+      if (disclaimerSheet[addr]) {
+        disclaimerSheet[addr].s = {
+          font: { color: { rgb: "FF1A1A18" }, name: "Calibri", sz: 10 },
+          alignment: { horizontal: "left", vertical: "top", wrapText: true },
+        };
+      }
+    });
+    disclaimerSheet["!cols"] = [{ wch: 110 }];
+    disclaimerSheet["!rows"] = [{ hpt: 26 }, { hpt: 8 }, { hpt: 32 }, { hpt: 22 }, { hpt: 32 }, { hpt: 8 }, { hpt: 80 }];
+
     // ── Build & download workbook ────────────────────────────
     const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, disclaimerSheet, "README");
     XLSX.utils.book_append_sheet(wb, ws1, "Receipts");
     XLSX.utils.book_append_sheet(wb, ws2, "Summary");
-    XLSX.writeFile(wb, "PreFile_Tax_Organizer_2025.xlsx");
+    XLSX.writeFile(wb, "PreFile_Organizer_2025.xlsx");
     logEvent("EXPORT_COMPLETED", { count: receipts.length });
     showToast("Color-coded organizer downloaded ✓");
     setShowDownloadMsg(true);
