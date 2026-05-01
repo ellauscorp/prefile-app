@@ -307,6 +307,304 @@ const GLOBAL_CSS = `
 `;
 
 
+// ── INSIGHT ENGINE ──────────────────────────────────────────────────────────
+// Single source of truth for rule-based insights. Called from BOTH the paywall
+// teaser (to count hidden insights) and the XLSX Summary sheet (to render them).
+//
+// Returns: { tier1: [], tier2: [], all: [] }
+//   tier1 — high-value catches (top 5, sorted by priority desc)
+//   tier2 — supporting patterns (top 3, sorted by priority desc)
+//   all   — full deduplicated list, sorted by priority desc (used by XLSX export)
+//
+// Each insight: { id, tier: 1 | 2, priority: number, line: string }
+// Higher priority = more important. Insights are deduped by id before sorting.
+
+// Merchant heuristics — used by detection rules below.
+const GAS_MERCHANT_RX = /\b(shell|chevron|exxon|mobil|bp|arco|costco gas|sunoco|valero|conoco|phillips|76|texaco|sinclair|marathon|speedway|wawa|sheetz|circle k|7-eleven|gas|fuel|petro)\b/i;
+const PARKING_RX      = /\b(parking|garage|park\+ride|paybyphone|spothero|premium parking|impark|laz parking|toll|e-?zpass|fastrak)\b/i;
+const MILEAGE_APP_RX  = /\b(mileiq|stride|everlance|hurdlr|triplog|mileage)\b/i;
+const MIXED_USE_RX    = /\b(amazon|costco|target|walmart|sam'?s club|whole foods|trader joe|kroger|safeway|cvs|walgreens|home depot|lowe'?s)\b/i;
+const UTILITY_RX      = /\b(internet|wifi|comcast|xfinity|spectrum|verizon|at&t|t-mobile|sprint|cox|frontier|optimum|cable|electric|pg&e|edison|water|sewer|gas company)\b/i;
+
+function computeInsights(receipts) {
+  const empty = { tier1: [], tier2: [], all: [] };
+  if (!receipts || receipts.length === 0) return empty;
+
+  // ── Aggregate ─────────────────────────────────────────────────────────────
+  const catTotals = {};
+  let grandBiz = 0;
+  receipts.forEach(r => {
+    const amt = parseFloat(r.amount) || 0;
+    const bizAmt = amt * ((r.businessPct || 100) / 100);
+    catTotals[r.category] = (catTotals[r.category] || 0) + bizAmt;
+    grandBiz += bizAmt;
+  });
+  if (grandBiz === 0) return empty;
+
+  const sorted = Object.entries(catTotals).sort((a,b) => b[1] - a[1]);
+  const insights = [];
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TIER 1 — CATCHES (concrete mistakes or missed money)
+  // Priority numbers: higher = more conversion impact.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── High-dollar meals (priority 100) — strongest catch in current data ──
+  const mealsTotal   = catTotals["Business meals"] || 0;
+  const mealReceipts = receipts.filter(r => r.category === "Business meals");
+  if (mealsTotal > 0) {
+    const highDollar = mealReceipts.filter(r => (parseFloat(r.amount) || 0) > 75);
+    if (highDollar.length > 0) {
+      const n = highDollar.length;
+      const verb = n === 1 ? "is" : "are";
+      insights.push({
+        id: "meals_high_dollar", tier: 1, priority: 100, conversionScore: 85,
+        line: `${n} of your meal receipts ${verb} over $75. These typically require documented attendees and a business purpose — without this, they can be disallowed if reviewed.`,
+      });
+    } else {
+      const overstateBy = mealsTotal * 0.5;
+      const entryWord   = mealReceipts.length === 1 ? "entry" : "entries";
+      insights.push({
+        id: "meals_50pct", tier: 1, priority: 75, conversionScore: 78,
+        line: `Your meals total $${mealsTotal.toFixed(0)} across ${mealReceipts.length} ${entryWord}. If these are filed at 100%, this could overstate your deductions by about $${overstateBy.toFixed(0)}, since meals are typically only 50% deductible.`,
+      });
+    }
+  }
+
+  // ── Mileage gap (priority 95) — gas/parking but no mileage entry ────────
+  const carReceipts = receipts.filter(r => r.category === "Car & mileage");
+  const gasParkingReceipts = carReceipts.filter(r =>
+    GAS_MERCHANT_RX.test(r.merchant || "") || PARKING_RX.test(r.merchant || "")
+  );
+  const hasMileageEntry = carReceipts.some(r => MILEAGE_APP_RX.test(r.merchant || ""));
+  if (gasParkingReceipts.length > 0 && !hasMileageEntry) {
+    const gasTotal = gasParkingReceipts.reduce(
+      (s, r) => s + (parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100), 0
+    );
+    insights.push({
+      id: "mileage_gap", tier: 1, priority: 95, conversionScore: 100,
+      line: `You logged $${gasTotal.toFixed(0)} in gas and parking but no business mileage. The IRS standard mileage rate is $0.67/mile for 2025 — most freelancers who drive for work miss $1,500–$3,000 in deductible mileage. Add your mileage estimate before filing.`,
+    });
+  }
+
+  // ── Health insurance missing (priority 90) — large-dollar gap ───────────
+  const insuranceTotal = catTotals["Insurance"] || 0;
+  if (insuranceTotal === 0 && grandBiz >= 5000) {
+    insights.push({
+      id: "health_insurance_missing", tier: 1, priority: 90, conversionScore: 95,
+      line: `You have no health insurance recorded. Self-employed freelancers can deduct 100% of health insurance premiums on Schedule 1 — for typical coverage that's $4,800–$9,600 per year. If you pay for your own coverage, this is one of the largest single deductions you can claim.`,
+    });
+  }
+
+  // ── Subscription velocity (priority 85) — annualize partial logging ─────
+  const softwareReceipts = receipts.filter(r => r.category === "Software & subscriptions");
+  const byMerchant = {};
+  softwareReceipts.forEach(r => {
+    const m = (r.merchant || "").trim().toLowerCase();
+    if (!m) return;
+    if (!byMerchant[m]) byMerchant[m] = [];
+    byMerchant[m].push(r);
+  });
+  const subscriptions = [];
+  Object.entries(byMerchant).forEach(([, group]) => {
+    if (group.length < 2) return;
+    const amounts = group.map(r => parseFloat(r.amount) || 0);
+    const variance = Math.max(...amounts) - Math.min(...amounts);
+    if (variance > 1) return;
+    const dated = group
+      .map(r => ({ ...r, _d: new Date(r.date) }))
+      .filter(r => !isNaN(r._d))
+      .sort((a, b) => a._d - b._d);
+    if (dated.length < 2) return;
+    let monthly = true;
+    for (let i = 1; i < dated.length; i++) {
+      const days = (dated[i]._d - dated[i-1]._d) / 86400000;
+      if (days < 25 || days > 35) { monthly = false; break; }
+    }
+    if (!monthly) return;
+    subscriptions.push({ merchant: group[0].merchant, monthly: amounts[0] });
+  });
+  if (subscriptions.length > 0) {
+    const annualizedTotal = subscriptions.reduce((s, sub) => s + sub.monthly * 12, 0);
+    const merchantList = subscriptions.map(s => s.merchant).slice(0, 3).join(", ") +
+                         (subscriptions.length > 3 ? `, +${subscriptions.length - 3} more` : "");
+    const subWord = subscriptions.length === 1 ? "recurring subscription" : "recurring subscriptions";
+    insights.push({
+      id: "subscription_velocity", tier: 1, priority: 85, conversionScore: 90,
+      line: `We detected ${subscriptions.length} ${subWord} in your data (${merchantList}). At your pace, these total $${annualizedTotal.toFixed(0)}/year — make sure you're claiming the full year, not just the months you logged.`,
+    });
+  }
+
+  // ── Home office with utility signal (priority 80) ────────────────────────
+  const hasWorkspace = (catTotals["Rent / workspace"] || 0) > 0;
+  const hasUtilitySignal =
+    (catTotals["Utilities"] || 0) > 0 ||
+    receipts.some(r => UTILITY_RX.test(r.merchant || ""));
+  if (!hasWorkspace && hasUtilitySignal) {
+    const utilTotal = (catTotals["Utilities"] || 0) +
+      receipts
+        .filter(r => r.category !== "Utilities" && UTILITY_RX.test(r.merchant || ""))
+        .reduce((s, r) => s + (parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100), 0);
+    insights.push({
+      id: "home_office_with_signal", tier: 1, priority: 80, conversionScore: 88,
+      line: `You logged $${utilTotal.toFixed(0)} in utilities/internet but no home office expense. If you work from home, the simplified home office deduction is $5/sq ft up to 300 sq ft — up to $1,500/year. This is one of the most commonly missed deductions for freelancers.`,
+    });
+  }
+
+  // ── Duplicate entries (priority 75) — same merchant, amount, date ────────
+  const dupKey = r => `${(r.merchant || "").toLowerCase().trim()}|${parseFloat(r.amount) || 0}|${r.date}`;
+  const dupGroups = {};
+  receipts.forEach(r => {
+    const k = dupKey(r);
+    if (!dupGroups[k]) dupGroups[k] = [];
+    dupGroups[k].push(r);
+  });
+  const dupes = Object.values(dupGroups).find(g => g.length > 1);
+  if (dupes) {
+    insights.push({
+      id: "duplicate_entries", tier: 1, priority: 75, conversionScore: 70,
+      line: `You have duplicate entries on ${dupes[0].date}: ${dupes[0].merchant} for $${parseFloat(dupes[0].amount).toFixed(2)}, listed ${dupes.length} times. If this is a duplicate entry, remove it before filing — duplicates inflate your deduction.`,
+    });
+  }
+
+  // ── Mixed-use 100% (priority 70) — Amazon/Costco at 100% business ───────
+  const mixedUse100 = receipts.filter(r =>
+    r.businessPct === 100 && MIXED_USE_RX.test(r.merchant || "")
+  );
+  if (mixedUse100.length >= 3) {
+    const merchants = [...new Set(mixedUse100.map(r => r.merchant))].slice(0, 3).join(", ");
+    insights.push({
+      id: "mixed_use_100pct", tier: 1, priority: 70, conversionScore: 75,
+      line: `You marked ${mixedUse100.length} purchases from ${merchants} as 100% business. These are merchants where personal use often slips in — if any portion was personal, claiming 100% can be reversed in an audit. Review and adjust the business % where appropriate.`,
+    });
+  }
+
+  // ── Rounded numbers (priority 65) — 3+ entries divisible by 50 or 100 ───
+  const roundedEntries = receipts.filter(r => {
+    const amt = parseFloat(r.amount) || 0;
+    return amt >= 20 && (amt % 100 === 0 || amt % 50 === 0);
+  });
+  if (roundedEntries.length >= 3) {
+    insights.push({
+      id: "rounded_numbers", tier: 1, priority: 65, conversionScore: 80,
+      line: `Several of your entries appear rounded (e.g., $100, $500). Estimated values can draw attention — consider reviewing these against actual receipts.`,
+    });
+  }
+
+  // ── High meals ratio (priority 60) — meals > 30% of total ───────────────
+  if (mealsTotal > 0) {
+    const mealsPct = (mealsTotal / grandBiz) * 100;
+    if (mealsPct > 30) {
+      insights.push({
+        id: "meals_high_ratio", tier: 1, priority: 60, conversionScore: 55,
+        line: `Meals make up ${mealsPct.toFixed(0)}% of your expenses, which is unusually high and may attract scrutiny if not well documented.`,
+      });
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TIER 2 — SUPPORTING PATTERNS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── Date gaps (priority 50) — missing months in middle of date range ────
+  const dated = receipts
+    .map(r => ({ d: new Date(r.date), amt: parseFloat(r.amount) || 0 }))
+    .filter(r => !isNaN(r.d));
+  if (dated.length >= 5) {
+    const monthsPresent = new Set(dated.map(r => `${r.d.getFullYear()}-${r.d.getMonth()}`));
+    const ds = dated.map(r => r.d).sort((a,b) => a - b);
+    const first = ds[0], last = ds[ds.length - 1];
+    const spanMonths = (last.getFullYear() - first.getFullYear()) * 12 + (last.getMonth() - first.getMonth()) + 1;
+    if (spanMonths >= 4) {
+      // Walk months between first and last; collect gaps of 2+ consecutive missing months
+      const gaps = [];
+      let curGap = [];
+      const cursor = new Date(first.getFullYear(), first.getMonth(), 1);
+      const stop   = new Date(last.getFullYear(),  last.getMonth(),  1);
+      while (cursor <= stop) {
+        const key = `${cursor.getFullYear()}-${cursor.getMonth()}`;
+        if (!monthsPresent.has(key)) {
+          curGap.push(new Date(cursor));
+        } else {
+          if (curGap.length >= 2) gaps.push([...curGap]);
+          curGap = [];
+        }
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+      if (curGap.length >= 2) gaps.push(curGap);
+      if (gaps.length > 0) {
+        const monthName = d => d.toLocaleDateString("en-US", { month: "short" });
+        const gap = gaps[0]; // most prominent gap (first one chronologically)
+        const gapStart = monthName(gap[0]);
+        const gapEnd   = monthName(gap[gap.length - 1]);
+        const gapLabel = gap.length === 1 ? gapStart : `${gapStart}–${gapEnd}`;
+        insights.push({
+          id: "date_gaps", tier: 2, priority: 50, conversionScore: 45,
+          line: `Your receipts span ${monthName(first)}–${monthName(last)}, but we see a gap in ${gapLabel}. Either no business activity happened then — or receipts from those months aren't logged yet. Missing months can mean unclaimed deductions.`,
+        });
+      }
+    }
+  }
+
+  // ── Category dominance (priority 45) — one category >= 40% ──────────────
+  const topPct = (sorted[0][1] / grandBiz) * 100;
+  if (topPct >= 40) {
+    insights.push({
+      id: "category_dominance", tier: 2, priority: 45, conversionScore: 60,
+      line: `${sorted[0][0]} makes up ${topPct.toFixed(0)}% of your expenses — unusually high concentration in one category.`,
+    });
+  }
+
+  // ── Small expenses accumulation (priority 40) — many sub-$10 entries ────
+  const smallEntries = receipts.filter(r => {
+    const amt = parseFloat(r.amount) || 0;
+    return amt > 0 && amt < 10;
+  });
+  if (smallEntries.length >= 10) {
+    const smallTotal = smallEntries.reduce(
+      (s, r) => s + (parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100), 0
+    );
+    insights.push({
+      id: "small_accumulation", tier: 2, priority: 40, conversionScore: 50,
+      line: `You have ${smallEntries.length} small expenses under $10 totaling $${smallTotal.toFixed(0)}. These add up — make sure each is genuinely business-related, since high volumes of small entries can attract scrutiny.`,
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Dedupe by id, sort by priority desc, slice tiers
+  // ─────────────────────────────────────────────────────────────────────────
+  const seen = new Set();
+  const deduped = [];
+  insights.forEach(ins => {
+    if (!seen.has(ins.id)) {
+      seen.add(ins.id);
+      deduped.push(ins);
+    }
+  });
+  deduped.sort((a, b) => b.conversionScore - a.conversionScore);
+
+  // Post-sort override: certain insights are conversion-critical regardless
+  // of score order. Force them to the front so they win the on-screen teaser
+  // slot (tier1[0]). Mileage takes precedence; insurance is the fallback.
+  const forceFront = (id) => {
+    const idx = deduped.findIndex(i => i.id === id);
+    if (idx > 0) {
+      const [item] = deduped.splice(idx, 1);
+      deduped.unshift(item);
+      return true;
+    }
+    return idx === 0; // already at front
+  };
+  if (!forceFront("mileage_gap")) forceFront("health_insurance_missing");
+
+  const tier1 = deduped.filter(i => i.tier === 1).slice(0, 4);
+  const tier2 = deduped.filter(i => i.tier === 2).slice(0, 3);
+  const all   = deduped;
+
+  return { tier1, tier2, all };
+}
+
+
 // ── CATEGORY LABEL WITH TOOLTIP ─────────────────────────────────────────────
 function CategoryLabel({ category, size = 12, showIcon = true, style = {} }) {
   const meta = CAT_META[category] || CAT_META["Other"];
@@ -530,8 +828,8 @@ function Homepage({ onStart, onCheck }) {
               opacity: vis ? 1 : 0, transform: vis ? "none" : "translateY(20px)",
               transition: "opacity 0.5s 0.07s, transform 0.5s 0.07s",
             }}>
-              Turn your messy receipts into a{" "}
-              <em style={{ color: C.forest, fontStyle: "italic" }}>clean, organized file for review</em>
+              Turn scattered receipts into a{" "}
+              <em style={{ color: C.forest, fontStyle: "italic" }}>CPA-ready summary — without spreadsheets</em>
             </h1>
 
             <p style={{
@@ -539,7 +837,7 @@ function Homepage({ onStart, onCheck }) {
               opacity: vis ? 1 : 0, transform: vis ? "none" : "translateY(20px)",
               transition: "opacity 0.5s 0.14s, transform 0.5s 0.14s",
             }}>
-              Stop scrambling at tax time — organize your receipts in minutes into a file prepared for review by your tax professional.
+              Organize your receipts in minutes into a clean, structured file you can confidently review or share with your tax professional.
             </p>
             <p style={{ fontSize: 12, color: C.inkFaint, marginBottom: 0, marginTop: 6 }}>
               Built for freelancers, small business owners, and side hustlers
@@ -553,6 +851,9 @@ function Homepage({ onStart, onCheck }) {
               <button className="pf-btn-primary" onClick={() => { logEvent("CTA_START_CLICKED"); onStart(); }} style={{ width: "100%", fontSize: 16, padding: "16px 28px" }}>
                 Organize my receipts →
               </button>
+              <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
+                Get organized before filing — so nothing gets missed
+              </div>
               <div>
                 <button className="pf-btn-secondary" onClick={onCheck} style={{ width: "100%" }}>
                   Check what I might be missing →
@@ -621,7 +922,7 @@ function Homepage({ onStart, onCheck }) {
             <div style={{ fontSize: 11, fontWeight: 600, color: C.forestLight, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>How it works</div>
             <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: "clamp(24px, 4vw, 36px)", fontWeight: 700, color: C.white, letterSpacing: "-0.4px" }}>Three steps, two minutes</h2>
             <p style={{ fontSize: 14, color: "rgba(255,255,255,0.65)", marginTop: 12, maxWidth: 560, lineHeight: 1.6 }}>
-              {PREFILE_POSITIONING}
+              You don't need to build spreadsheets, guess categories, or organize everything manually. PreFile structures your receipts for you — so you can focus on reviewing, not figuring it out.
             </p>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 20 }}>
@@ -638,6 +939,22 @@ function Homepage({ onStart, onCheck }) {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* DIFFERENTIATION */}
+      <section style={{ padding: "60px 24px", background: C.cream }}>
+        <div style={{ maxWidth: 720, margin: "0 auto", textAlign: "center" }}>
+          <h2 style={{
+            fontFamily: "'Fraunces', serif",
+            fontSize: "clamp(22px,3.5vw,34px)", fontWeight: 700, color: C.ink,
+            letterSpacing: "-0.4px", marginBottom: 14,
+          }}>
+            Not a spreadsheet. A prepared summary.
+          </h2>
+          <p style={{ fontSize: 15, color: C.inkLight, lineHeight: 1.65, margin: 0 }}>
+            Spreadsheets require setup, formulas, and manual organization. PreFile does the structuring for you — and shows what actually matters.
+          </p>
         </div>
       </section>
 
@@ -690,7 +1007,7 @@ function Homepage({ onStart, onCheck }) {
       {/* BOTTOM CTA */}
       <section style={{ padding:"68px 24px", background:C.forest, textAlign:"center" }}>
         <h2 style={{ fontFamily:"'Fraunces', serif", fontSize:"clamp(24px,4vw,38px)", fontWeight:700, color:C.white, letterSpacing:"-0.4px", marginBottom:12 }}>
-          Ready to get organized?
+          Get organized before you file
         </h2>
         <p style={{ color:"rgba(255,255,255,0.65)", fontSize:15, marginBottom:30, maxWidth:380, margin:"0 auto 30px" }}>
           No account needed. Start adding receipts in seconds.
@@ -698,6 +1015,9 @@ function Homepage({ onStart, onCheck }) {
         <button className="pf-btn-primary" onClick={() => { logEvent("CTA_START_CLICKED"); onStart(); }} style={{ background:C.white, color:C.forest, boxShadow:"0 4px 20px rgba(0,0,0,0.18)", margin:"0 auto", padding:"16px 36px", fontSize:16 }}>
           Organize my receipts →
         </button>
+        <div style={{ marginTop:12, fontSize:12, color:"rgba(255,255,255,0.7)" }}>
+          You review everything before filing — this just organizes it for you
+        </div>
         <div style={{ marginTop:18, fontSize:11, color:"rgba(255,255,255,0.4)" }}>
           PreFile is an organizational tool — not tax advice. Always verify with your tax professional.
         </div>
@@ -1028,7 +1348,7 @@ function EditScreen({ receipt, onSave, onCancel }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // PAYWALL MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
-function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
+function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCount = 0 }) {
   const valueItems = [
     `${receiptCount} organized receipt${receiptCount !== 1 ? "s" : ""}`,
     "Category breakdown by spend",
@@ -1091,11 +1411,27 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
           fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 700,
           color: C.ink, letterSpacing: "-0.3px", marginBottom: 6,
         }}>
-          Everything organized in one place — so nothing gets missed before filing.
+          Walk into your tax review organized — so nothing gets missed
         </h2>
         <p style={{ fontSize: 13, color: C.inkLight, lineHeight: 1.6, marginBottom: 18 }}>
-          Get to filing day without the scramble.
+          Your receipts, categories, and totals — already structured and ready to review.
         </p>
+        {hiddenInsightsCount > 0 && (
+          <>
+            <div style={{
+              background: "rgba(212,160,23,0.10)",
+              border: "1px solid rgba(212,160,23,0.28)",
+              borderRadius: 10, padding: "11px 14px",
+              fontSize: 13, color: C.ink, lineHeight: 1.5,
+              marginBottom: 8, fontWeight: 600,
+            }}>
+              We found {hiddenInsightsCount >= 5 ? "5+" : hiddenInsightsCount} more {hiddenInsightsCount === 1 ? "thing" : "things"} worth reviewing before filing.
+            </div>
+            <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginBottom: 16 }}>
+              Most users catch at least one thing worth fixing.
+            </div>
+          </>
+        )}
         <div style={{ fontSize: 12, color: C.inkFaint, marginTop: 6 }}>
           Cheaper than one hour of your accountant's time.
         </div>
@@ -1188,13 +1524,9 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
         {/* Price */}
         <div style={{
           background: C.creamDark, borderRadius: 11, padding: "11px 14px",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
+          display: "flex", alignItems: "center", justifyContent: "flex-end",
           marginBottom: 14,
         }}>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.ink }}>One-time · No subscription</div>
-            <div style={{ fontSize: 10, color: C.inkFaint, marginTop: 2 }}>Keep forever · Instant download</div>
-          </div>
           <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 700, color: C.forest }}>$12</div>
         </div>
 
@@ -1204,19 +1536,22 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0 }) {
           onClick={() => { logEvent("PAY_CLICKED", { count: receiptCount }); onUnlock(); }}
           style={{ width: "100%", fontSize: 15, padding: "14px", marginBottom: 6 }}
         >
-          Get my organized file instantly — $12
+          Unlock full review — $12
         </button>
+        <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
+          One-time payment · Instant download · Yours to keep
+        </div>
         <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
-          You'll review everything before filing — this just organizes it for you
+          You review everything before filing — this just organizes it for you
         </div>
         <div style={{ fontSize: 12, color: C.inkLight, marginTop: 8, textAlign: "center" }}>
           Your complete, organized report — receipts, categories, and totals in one place
         </div>
         <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
-          We don't store or transmit your receipts — everything stays on your device.
+          We don't store or transmit your receipts — everything stays on your device
         </div>
         <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, marginBottom: 12, textAlign: "center" }}>
-          Used by freelancers and small business owners to get organized before filing — especially during tax season.
+          Used by freelancers and small business owners to get organized before filing
         </div>
 
         <button
@@ -1701,6 +2036,34 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
           </span>
         </div>
       )}
+
+      {/* Free insight teaser — surfaces the top tier-1 insight to build trust */}
+      {(() => {
+        const { tier1 } = computeInsights(receipts);
+        if (tier1.length === 0) return null;
+        return (
+          <div style={{
+            background: "rgba(212,160,23,0.10)",
+            border: "1px solid rgba(212,160,23,0.28)",
+            borderRadius: 11, padding: "14px 16px",
+            marginBottom: 20,
+            display: "flex", alignItems: "flex-start", gap: 12,
+          }}>
+            <Icon name="zap" size={18} color="#B8860B" strokeWidth={2} />
+            <div style={{ flex: 1 }}>
+              <div style={{
+                fontSize: 11, fontWeight: 700, color: "#7A5C0A",
+                textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4,
+              }}>
+                We noticed
+              </div>
+              <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.55 }}>
+                {tier1[0].line}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 288px", gap: 24, alignItems: "start" }}>
 
@@ -2631,22 +2994,6 @@ export default function PreFileApp() {
 
     // ── Sheet 2: SUMMARY ─────────────────────────────────────
     const ws2 = {};
-    ws2["!merges"] = [];
-
-    // Title
-    ws2["A1"] = { v: "PreFile · Expense Summary · Tax Year 2025", t: "s", s: {
-      font:      { bold: true, color: { rgb: WHITE }, name: "Calibri", sz: 12 },
-      fill:      { fgColor: { rgb: FOREST }, patternType: "solid" },
-      alignment: { horizontal: "left", vertical: "center" },
-    }};
-    ws2["!merges"].push({ s:{r:0,c:0}, e:{r:0,c:4} });
-
-    // Summary headers
-    const HDR_SUMMARY = ["Category", "Description", "Total Spent ($)", "% of Total", "Business Amount ($)"];
-    const COLS_SUMMARY = ["A","B","C","D","E"];
-    HDR_SUMMARY.forEach((h, ci) => {
-      ws2[COLS_SUMMARY[ci] + "2"] = { v: h, t: "s", s: headerStyle() };
-    });
 
     // Build category totals, sorted by business amount descending
     const catTotals = {};
@@ -2658,68 +3005,110 @@ export default function PreFileApp() {
     const sorted = Object.entries(catTotals).sort((a,b) => b[1] - a[1]);
     const grandBiz = grandTotal;
 
-    sorted.forEach(([cat, bizAmt], i) => {
-      const rowNum  = i + 3;
-      const catMeta = CAT_META[cat] || CAT_META["Other"];
-      const catDef  = CATEGORY_DEFINITIONS[cat] || "";
-      const pctOfTotal = grandBiz > 0 ? bizAmt / grandBiz : 0;
-      const bgArgb  = soften(catMeta.color);
-
-      const rowData = [
-        cat,
-        catDef,
-        bizAmt,
-        pctOfTotal,
-        bizAmt,
-      ];
-      rowData.forEach((v, ci) => {
-        const addr = COLS_SUMMARY[ci] + rowNum;
-        const isAmt = ci === 2 || ci === 4;
-        const isPct = ci === 3;
-        const s = dataStyle(bgArgb, ci === 0, ci <= 1 ? "left" : "right");
-        ws2[addr] = { v, t: typeof v === "number" ? "n" : "s", s };
-        if (isAmt) ws2[addr].z = "$#,##0.00";
-        if (isPct) ws2[addr].z = "0.0%";
-      });
-    });
-
-    // Grand total row in summary
-    const sumTotalRow = sorted.length + 3;
-    ["TOTAL", "All tracked expenses", grandBiz, 1, grandBiz].forEach((v, ci) => {
-      const addr = COLS_SUMMARY[ci] + sumTotalRow;
-      ws2[addr] = { v, t: typeof v === "number" ? "n" : "s", s: totalStyle };
-      if (ci === 2 || ci === 4) ws2[addr].z = "$#,##0.00";
-      if (ci === 3) ws2[addr].z = "0.0%";
-    });
-
-    // Note row
-    const noteRow = sumTotalRow + 1;
-    ws2["A" + noteRow] = {
-      v: "This summary is for organizational purposes only. Confirm deductibility with your tax professional before filing.",
-      t: "s",
-      s: {
-        font:      { italic: true, color: { rgb: "FF9A9A97" }, name: "Calibri", sz: 9 },
-        fill:      { fgColor: { rgb: CREAM2 }, patternType: "solid" },
-        alignment: { horizontal: "left", wrapText: true },
-      },
+    // Reusable styles for this sheet
+    const summaryHeaderStyle = {
+      font:      { bold: true, color: { rgb: "FF1B5E20" }, name: "Calibri", sz: 14 },
+      alignment: { horizontal: "left", vertical: "center" },
     };
-    ws2["!merges"].push({ s:{r:noteRow-1,c:0}, e:{r:noteRow-1,c:4} });
+    const totalLabelStyle = {
+      font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 11 },
+      alignment: { horizontal: "left", vertical: "center" },
+    };
+    const totalAmountStyle = {
+      font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 11 },
+      alignment: { horizontal: "right", vertical: "center" },
+    };
+    const tableHeaderStyle = {
+      font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 11 },
+      alignment: { horizontal: "left", vertical: "center" },
+    };
+    const summarySubheaderStyle = {
+      font:      { italic: true, color: { rgb: INK }, name: "Calibri", sz: 11 },
+      alignment: { horizontal: "left", vertical: "center" },
+    };
 
-    ws2["!ref"] = XLSX.utils.encode_range({ s:{c:0,r:0}, e:{c:4,r:noteRow} });
-    ws2["!cols"] = [{ wch: 28 }, { wch: 52 }, { wch: 16 }, { wch: 12 }, { wch: 18 }];
-    ws2["!rows"] = [{ hpt: 22 }, { hpt: 18 }, ...sorted.map(() => ({ hpt: 40 })), { hpt: 18 }, { hpt: 28 }];
+    // Row 1: Sheet header (styled)
+    ws2["A1"] = { v: "Here are your full analysis results — including additional insights to review.", t: "s", s: summaryHeaderStyle };
+
+    // Row 2: Subheader (italic, smaller, muted ink — sits directly under header)
+    ws2["A2"] = { v: "Review each section carefully before filing.", t: "s", s: summarySubheaderStyle };
+
+    // Row 3: blank (gap between header block and totals)
+
+    // Row 4: Total Business Expenses (label + amount, both bold, B as currency)
+    ws2["A4"] = { v: "Total Business Expenses", t: "s", s: totalLabelStyle };
+    ws2["B4"] = { v: grandBiz, t: "n", s: totalAmountStyle, z: "$#,##0.00" };
+
+    // Row 5: blank
+
+    // Rows 6..N (only when there's data): Insights — one per row, full list.
+    // Uses the shared computeInsights() helper so the paywall teaser count and
+    // the exported file are guaranteed to be in sync. The XLSX uses the full
+    // .all list (deduped + sorted by priority desc); the paywall pitch uses
+    // .tier1 length only.
+    // The "highest spend" top-line summary follows as the last insight row.
+    // When sorted is empty, no insights are written and downstream rows do NOT shift.
+    const insights = sorted.length > 0 ? computeInsights(receipts).all : [];
+    const insightCount  = insights.length;
+    const topLineShift  = sorted.length > 0 ? 1 : 0;
+    const shift = insightCount + topLineShift;
+
+    insights.forEach((ins, i) => {
+      ws2["A" + (6 + i)] = { v: ins.line, t: "s" };
+    });
+    if (sorted.length > 0) {
+      const topPct = grandBiz > 0 ? ((sorted[0][1] / grandBiz) * 100).toFixed(0) : 0;
+      ws2["A" + (6 + insightCount)] = { v: `Your highest business spend is ${sorted[0][0]} (${topPct}% of total)`, t: "s" };
+    }
+
+    // Row 6 or 7: Section title — Category Breakdown
+    ws2["A" + (6 + shift)] = { v: "Category Breakdown", t: "s", s: tableHeaderStyle };
+
+    // Row 7 or 8: Table headers
+    const headerRow = 7 + shift;
+    ws2["A" + headerRow] = { v: "Category",    t: "s", s: tableHeaderStyle };
+    ws2["B" + headerRow] = { v: "Total",       t: "s", s: { ...tableHeaderStyle, alignment: { horizontal: "right", vertical: "center" } } };
+    ws2["C" + headerRow] = { v: "% of Spend",  t: "s", s: { ...tableHeaderStyle, alignment: { horizontal: "right", vertical: "center" } } };
+
+    // Rows 8+ or 9+: Category data (sorted by total DESC, no per-row styling)
+    sorted.forEach(([cat, bizAmt], i) => {
+      const rowNum = i + 8 + shift;
+      const pctOfTotal = grandBiz > 0 ? bizAmt / grandBiz : 0;
+      ws2["A" + rowNum] = { v: cat,        t: "s" };
+      ws2["B" + rowNum] = { v: bizAmt,     t: "n", z: "$#,##0.00" };
+      ws2["C" + rowNum] = { v: pctOfTotal, t: "n", z: "0.0%" };
+    });
+
+    // Top Categories section — 1 blank row gap, then title, then top 3
+    const lastDataRow = 7 + shift + sorted.length;    // row of last category (or headerRow if empty)
+    const topTitleRow = lastDataRow + 2;              // blank row, then title
+    ws2["A" + topTitleRow] = { v: "Top Categories", t: "s", s: tableHeaderStyle };
+
+    const topThree = sorted.slice(0, 3);
+    topThree.forEach(([cat, bizAmt], i) => {
+      const rowNum = topTitleRow + 1 + i;
+      ws2["A" + rowNum] = { v: `#${i + 1} ${cat} — $${bizAmt.toFixed(2)} (${grandBiz > 0 ? ((bizAmt / grandBiz) * 100).toFixed(0) : 0}% of spend)`, t: "s" };
+    });
+
+    // Sheet metadata: range, columns, no merges
+    const lastRow = topTitleRow + topThree.length;    // last row containing content
+    ws2["!ref"]  = XLSX.utils.encode_range({ s:{c:0,r:0}, e:{c:2,r:lastRow} });
+    ws2["!cols"] = [{ wch: 32 }, { wch: 16 }, { wch: 14 }];
+    // No merges, no per-row heights, no fills beyond header — per spec
 
     // ── Build disclaimer / README sheet ──────────────────────
     const disclaimerSheet = XLSX.utils.aoa_to_sheet([
       ["PreFile Organizer — For Preparation & Review Only"],
       [""],
       ["This document is an organized summary of financial information based on user input and suggested categorization."],
+      [""],
       ["It is not a completed tax return and should not be used for filing without review."],
+      [""],
       ["Please confirm all entries with a qualified tax professional before submitting any tax forms."],
       [""],
-      [PREFILE_DISCLAIMER],
+      ["PreFile is an organizational tool designed to help you collect and structure financial information before filing taxes. It does not provide tax, legal, or financial advice. You are responsible for reviewing all entries before filing."],
     ]);
-    // Light styling: bold title, wrapped body, wider column
+    // Header styling — A1 only (bold, larger, dark green)
     disclaimerSheet["A1"] = {
       v: "PreFile Organizer — For Preparation & Review Only",
       t: "s",
@@ -2728,21 +3117,22 @@ export default function PreFileApp() {
         alignment: { horizontal: "left", vertical: "center", wrapText: true },
       },
     };
-    [3, 4, 5, 7].forEach(rowNum => {
-      const addr = "A" + rowNum;
-      if (disclaimerSheet[addr]) {
-        disclaimerSheet[addr].s = {
-          font: { color: { rgb: "FF1A1A18" }, name: "Calibri", sz: 10 },
-          alignment: { horizontal: "left", vertical: "top", wrapText: true },
-        };
-      }
-    });
     disclaimerSheet["!cols"] = [{ wch: 110 }];
-    disclaimerSheet["!rows"] = [{ hpt: 26 }, { hpt: 8 }, { hpt: 32 }, { hpt: 22 }, { hpt: 32 }, { hpt: 8 }, { hpt: 80 }];
+    disclaimerSheet["!rows"] = [
+      { hpt: 26 }, // 1: header
+      { hpt: 8 },  // 2: blank
+      { hpt: 32 }, // 3: body
+      { hpt: 8 },  // 4: blank
+      { hpt: 22 }, // 5: body
+      { hpt: 8 },  // 6: blank
+      { hpt: 32 }, // 7: body
+      { hpt: 8 },  // 8: blank
+      { hpt: 48 }, // 9: long body
+    ];
 
     // ── Build & download workbook ────────────────────────────
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, disclaimerSheet, "README");
+    XLSX.utils.book_append_sheet(wb, disclaimerSheet, "README — PreFile Organizer");
     XLSX.utils.book_append_sheet(wb, ws1, "Receipts");
     XLSX.utils.book_append_sheet(wb, ws2, "Summary");
     XLSX.writeFile(wb, "PreFile_Organizer_2025.xlsx");
@@ -2860,9 +3250,20 @@ export default function PreFileApp() {
       )}
 
       {/* Paywall modal */}
-      {showPaywall && (
-        <PaywallModal onUnlock={handleUnlock} onDismiss={handlePaywallDismiss} receiptCount={receipts.length} />
-      )}
+      {showPaywall && (() => {
+        // tier1 is already capped at 5, sorted by priority desc. The on-screen
+        // teaser shows tier1[0]; the paywall pitches the remainder.
+        const { tier1 } = computeInsights(receipts);
+        const hiddenInsightsCount = Math.max(0, tier1.length - 1);
+        return (
+          <PaywallModal
+            onUnlock={handleUnlock}
+            onDismiss={handlePaywallDismiss}
+            receiptCount={receipts.length}
+            hiddenInsightsCount={hiddenInsightsCount}
+          />
+        );
+      })()}
     </>
   );
 }
