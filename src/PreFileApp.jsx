@@ -1016,7 +1016,7 @@ function Homepage({ onStart, onCheck }) {
           Organize my receipts →
         </button>
         <div style={{ marginTop:12, fontSize:12, color:"rgba(255,255,255,0.7)" }}>
-          You review everything before filing — this just organizes it for you
+          You stay in control — review everything before filing.
         </div>
         <div style={{ marginTop:18, fontSize:11, color:"rgba(255,255,255,0.4)" }}>
           PreFile is an organizational tool — not tax advice. Always verify with your tax professional.
@@ -1349,6 +1349,7 @@ function EditScreen({ receipt, onSave, onCancel }) {
 // PAYWALL MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
 function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCount = 0 }) {
+  const [preparing, setPreparing] = useState(false);
   const valueItems = [
     `${receiptCount} organized receipt${receiptCount !== 1 ? "s" : ""}`,
     "Category breakdown by spend",
@@ -1411,10 +1412,10 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
           fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 700,
           color: C.ink, letterSpacing: "-0.3px", marginBottom: 6,
         }}>
-          Walk into your tax review organized — so nothing gets missed
+          Review everything clearly before you file — so nothing gets missed.
         </h2>
         <p style={{ fontSize: 13, color: C.inkLight, lineHeight: 1.6, marginBottom: 18 }}>
-          Your receipts, categories, and totals — already structured and ready to review.
+          Your receipts organized by category — plus specific things to review before you file.
         </p>
         {hiddenInsightsCount > 0 && (
           <>
@@ -1425,7 +1426,7 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
               fontSize: 13, color: C.ink, lineHeight: 1.5,
               marginBottom: 8, fontWeight: 600,
             }}>
-              We found {hiddenInsightsCount >= 5 ? "5+" : hiddenInsightsCount} more {hiddenInsightsCount === 1 ? "thing" : "things"} worth reviewing before filing.
+              We found a few things worth reviewing before you file.
             </div>
             <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginBottom: 16 }}>
               Most users catch at least one thing worth fixing.
@@ -1530,28 +1531,54 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
           <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 700, color: C.forest }}>$12</div>
         </div>
 
+        {/* Value clarity — sits directly above CTA */}
+        <div style={{ fontSize: 12, color: C.inkLight, textAlign: "center", marginBottom: 10, lineHeight: 1.5 }}>
+          Your full summary includes categorized receipts, totals, and things worth reviewing.
+        </div>
+
         {/* Primary CTA */}
         <button
           className="pf-btn-primary"
-          onClick={() => { logEvent("PAY_CLICKED", { count: receiptCount }); onUnlock(); }}
-          style={{ width: "100%", fontSize: 15, padding: "14px", marginBottom: 6 }}
+          onClick={() => {
+            if (preparing) return;
+            logEvent("PAY_CLICKED", { count: receiptCount });
+            setPreparing(true);
+            // Brief loading transition before paywall closes (lets user see acknowledgment)
+            setTimeout(() => onUnlock(), 400);
+          }}
+          disabled={preparing}
+          style={{
+            width: "100%", fontSize: 15, padding: "14px", marginBottom: 6,
+            opacity: preparing ? 0.85 : 1,
+            cursor: preparing ? "not-allowed" : "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+          }}
         >
-          Unlock full review — $12
+          {preparing ? (
+            <>
+              <svg
+                className="spin"
+                width="16" height="16" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" strokeWidth="2.5"
+                strokeLinecap="round" strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+              </svg>
+              Preparing your file…
+            </>
+          ) : (
+            "Unlock my full summary — $12"
+          )}
         </button>
         <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
-          One-time payment · Instant download · Yours to keep
+          One-time payment · Instant access · Yours to keep — no subscription
         </div>
         <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
-          You review everything before filing — this just organizes it for you
-        </div>
-        <div style={{ fontSize: 12, color: C.inkLight, marginTop: 8, textAlign: "center" }}>
-          Your complete, organized report — receipts, categories, and totals in one place
-        </div>
-        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
-          We don't store or transmit your receipts — everything stays on your device
+          You stay in control — review everything before filing.
         </div>
         <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, marginBottom: 12, textAlign: "center" }}>
-          Used by freelancers and small business owners to get organized before filing
+          We don't store or transmit your receipts — everything stays on your device.
         </div>
 
         <button
@@ -2251,7 +2278,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                 <div style={{ marginTop: 8, fontSize: 11, color: C.inkFaint, textAlign: "center" }}>
                   {isSaved
                     ? "Your receipts are saved · Export ready"
-                    : "Free to try · Pay only to save and export"
+                    : "Your receipts are not saved yet — use the button below to download your file."
                   }
                 </div>
                 {showDownloadMsg && (
@@ -3142,12 +3169,18 @@ export default function PreFileApp() {
   };
 
   const handleUnlock = () => {
+    if (isSaved) return;
     setIsSaved(true);
     setShowPaywall(false);
     setShowSavedConfirm(true);
     setTimeout(() => setShowSavedConfirm(false), 2500);
-    showToast("Receipts saved · Your file is ready");
-    setTimeout(() => doExport(), 600);
+    setTimeout(() => {
+      showToast("Your full summary is ready — download starting…");
+      Promise.resolve().then(() => doExport());
+    }, 600);
+    setTimeout(() => {
+      showToast("Saved to your device.");
+    }, 3500);
   };
 
   const handlePaywallDismiss = () => {
