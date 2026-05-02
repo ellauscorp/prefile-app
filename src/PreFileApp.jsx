@@ -33,6 +33,34 @@ const CATEGORIES = [
   "Equipment & tools", "Other",
 ];
 
+// Common mapping of expense categories to lines on the current IRS Schedule C
+// (Form 1040). Conservative posture: only mappings where the IRS form's printed
+// line label literally matches the category (e.g., Line 15 "Insurance",
+// Line 24a "Travel", Line 20b "Other business property" for office rent).
+// Mappings that require any judgment about *which* line a category belongs to
+// (Car & mileage, Contractors, Legal, Office expenses, Taxes & licenses,
+// Software, Equipment, Other) use "Varies" so the user is nudged to confirm
+// rather than presented with an inferred line number.
+// This is COMMON MAPPING, not tax advice — see the disclaimer rendered below
+// the Category Breakdown table in the exported XLSX.
+const SCHEDULE_C_REFERENCE = {
+  "Advertising & marketing": "Schedule C Line 8",
+  "Car & mileage":           "Varies — depends on use, review before filing",
+  "Contractors & services":  "Varies — depends on use, review before filing",
+  "Insurance":               "Schedule C Line 15",
+  "Legal & professional":    "Varies — depends on use, review before filing",
+  "Office expenses":         "Varies — depends on use, review before filing",
+  "Rent / workspace":        "Schedule C Line 20b",
+  "Supplies":                "Schedule C Line 22",
+  "Taxes & licenses":        "Varies — depends on use, review before filing",
+  "Travel":                  "Schedule C Line 24a",
+  "Business meals":          "Schedule C Line 24b",
+  "Utilities":               "Schedule C Line 25",
+  "Software & subscriptions":"Varies — depends on use, review before filing",
+  "Equipment & tools":       "Varies — depends on use, review before filing",
+  "Other":                   "Varies — depends on use, review before filing",
+};
+
 
 const CATEGORY_DEFINITIONS = {
   "Advertising & marketing": "Costs to promote your business — social media ads, flyers, business cards, sponsored posts, or any paid promotion.",
@@ -198,11 +226,11 @@ function suggestCategory(merchant) {
 }
 
 const SAMPLE_MERCHANTS = [
-  { merchant: "Canva Pro", amount: "12.99", date: "Apr 18, 2026", category: "Software & subscriptions" },
-  { merchant: "USPS Shipping", amount: "47.80", date: "Apr 15, 2026", category: "Supplies" },
-  { merchant: "Starbucks", amount: "38.50", date: "Apr 12, 2026", category: "Business meals" },
-  { merchant: "Google Workspace", amount: "14.00", date: "Apr 10, 2026", category: "Software & subscriptions" },
-  { merchant: "AT&T Monthly", amount: "95.00", date: "Apr 1, 2026", category: "Utilities" },
+  { merchant: "Canva Pro — monthly plan",      amount: "12.99", date: "Apr 18, 2026", category: "Software & subscriptions" },
+  { merchant: "USPS — label purchase",          amount: "18.45", date: "Apr 15, 2026", category: "Supplies" },
+  { merchant: "Starbucks — client meeting",     amount: "11.85", date: "Apr 12, 2026", category: "Business meals" },
+  { merchant: "Google Workspace — team plan",   amount: "14.40", date: "Apr 10, 2026", category: "Software & subscriptions" },
+  { merchant: "AT&T — internet & phone",        amount: "89.20", date: "Apr 1, 2026",  category: "Utilities" },
 ];
 
 // ─── SHARED STYLES ───────────────────────────────────────────────────────────
@@ -382,7 +410,7 @@ function computeInsights(receipts) {
       (s, r) => s + (parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100), 0
     );
     insights.push({
-      id: "mileage_gap", tier: 1, priority: 95, conversionScore: 100,
+      id: "mileage_gap", tier: 1, priority: 95, conversionScore: 140,
       line: `You logged $${gasTotal.toFixed(0)} in gas and parking but no business mileage. The IRS standard mileage rate is $0.67/mile for 2025 — most freelancers who drive for work miss $1,500–$3,000 in deductible mileage. Add your mileage estimate before filing.`,
     });
   }
@@ -391,7 +419,7 @@ function computeInsights(receipts) {
   const insuranceTotal = catTotals["Insurance"] || 0;
   if (insuranceTotal === 0 && grandBiz >= 5000) {
     insights.push({
-      id: "health_insurance_missing", tier: 1, priority: 90, conversionScore: 95,
+      id: "health_insurance_missing", tier: 1, priority: 90, conversionScore: 130,
       line: `You have no health insurance recorded. Self-employed freelancers can deduct 100% of health insurance premiums on Schedule 1 — for typical coverage that's $4,800–$9,600 per year. If you pay for your own coverage, this is one of the largest single deductions you can claim. Add this entry before filing if it applies to you.`,
     });
   }
@@ -581,27 +609,13 @@ function computeInsights(receipts) {
       deduped.push(ins);
     }
   });
-  deduped.sort((a, b) => b.conversionScore - a.conversionScore);
+  const sortedInsights = [...deduped].sort((a, b) => b.conversionScore - a.conversionScore);
 
-  // Post-sort override: certain insights are conversion-critical regardless
-  // of score order. Force them to the front so they win the on-screen teaser
-  // slot (tier1[0]). Mileage takes precedence; insurance is the fallback.
-  const forceFront = (id) => {
-    const idx = deduped.findIndex(i => i.id === id);
-    if (idx > 0) {
-      const [item] = deduped.splice(idx, 1);
-      deduped.unshift(item);
-      return true;
-    }
-    return idx === 0; // already at front
-  };
-  if (!forceFront("mileage_gap")) forceFront("health_insurance_missing");
+  const tier1 = sortedInsights.filter(i => i.tier === 1).slice(0, 4);
+  const tier2 = sortedInsights.filter(i => i.tier === 2).slice(0, 3);
+  const all   = sortedInsights;
 
-  const tier1 = deduped.filter(i => i.tier === 1).slice(0, 4);
-  const tier2 = deduped.filter(i => i.tier === 2).slice(0, 3);
-  const all   = deduped;
-
-  return { tier1, tier2, all };
+  return { tier1: tier1 || [], tier2: tier2 || [], all: all || [] };
 }
 
 
@@ -890,7 +904,7 @@ function Homepage({ onStart, onCheck }) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 600, color: C.inkFaint, textTransform: "uppercase", letterSpacing: "0.07em" }}>Tracked expenses</div>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, fontFamily: "'Fraunces', serif", marginTop: 2 }}>$208.29</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, fontFamily: "'Fraunces', serif", marginTop: 2 }}>$146.89</div>
                 </div>
                 <div style={{ background: C.forest, color: C.white, fontSize: 11, fontWeight: 700, padding: "5px 11px", borderRadius: 8 }}>
                   5 receipts
@@ -910,7 +924,7 @@ function Homepage({ onStart, onCheck }) {
 
               <div style={{ marginTop: 14, background: C.forest, borderRadius: 12, padding: "11px 16px", display: "flex", justifyContent: "space-between" }}>
                 <span style={{ color: "#A5D6A7", fontSize: 12, fontWeight: 600 }}>Total tracked</span>
-                <span style={{ color: C.white, fontSize: 17, fontWeight: 700, fontFamily: "'Fraunces', serif" }}>$208.29</span>
+                <span style={{ color: C.white, fontSize: 17, fontWeight: 700, fontFamily: "'Fraunces', serif" }}>$146.89</span>
               </div>
               <div style={{ marginTop: 8, fontSize: 10, color: C.inkFaint, textAlign: "center" }}>For organization only · Confirm deductibility with your tax professional</div>
             </div>
@@ -925,7 +939,7 @@ function Homepage({ onStart, onCheck }) {
           <div style={{ textAlign: "center", marginBottom: 44 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: C.forestLight, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>How it works</div>
             <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: "clamp(24px, 4vw, 36px)", fontWeight: 700, color: C.white, letterSpacing: "-0.4px" }}>Three steps, two minutes</h2>
-            <p style={{ fontSize: 14, color: "rgba(255,255,255,0.65)", maxWidth: 640, lineHeight: 1.6, textAlign: "center", margin: "12px auto 0" }}>
+            <p style={{ fontSize: 14, color: "rgba(255,255,255,0.72)", maxWidth: 640, lineHeight: 1.7, textAlign: "center", margin: "12px auto 0" }}>
               You don't need to build spreadsheets, guess categories, or organize everything manually. PreFile structures your receipts for you — so you can focus on reviewing, not figuring it out.
             </p>
           </div>
@@ -1352,14 +1366,33 @@ function EditScreen({ receipt, onSave, onCancel }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // PAYWALL MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
-function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCount = 0 }) {
+function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCount = 0, receipts = [] }) {
   const [preparing, setPreparing] = useState(false);
+  // Build a candidate pool from tier1 + tier2, exclude the teaser insight the
+  // user already saw on the Organizer screen, and pick whichever remaining
+  // insight has the highest conversionScore. The teaser is selected with the
+  // same curiosity-weighted comparator OrganizerScreen uses, so this filter
+  // tracks the actual on-screen teaser rather than tier1[0].
+  const { tier1, tier2 } = computeInsights(receipts);
+  const teaserInsight = tier1.length > 0
+    ? [...tier1].sort((a, b) => {
+        const curiosityBoost = { mileage_gap: 50, subscription_velocity: 40, meals_high_dollar: 35 };
+        return (
+          (b.conversionScore + (curiosityBoost[b.id] || 0)) -
+          (a.conversionScore + (curiosityBoost[a.id] || 0))
+        );
+      })[0]
+    : null;
+  const allCandidates = [...tier1, ...tier2];
+  const unseenInsights = allCandidates.filter(ins => ins.id !== teaserInsight?.id);
+  const paywallInsight = unseenInsights.length > 0
+    ? [...unseenInsights].sort((a, b) => b.conversionScore - a.conversionScore)[0]
+    : null;
   const valueItems = [
-    `${receiptCount} organized receipt${receiptCount !== 1 ? "s" : ""}`,
-    "Category breakdown by spend",
-    "Clean, reviewable formatting",
-    "Plain-English explanations",
-    "Notes column for business purpose",
+    `${receiptCount} receipts organized`,
+    "Totals by category",
+    "Items worth reviewing",
+    "Clean format ready for filing",
   ];
 
   return (
@@ -1416,35 +1449,13 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
           fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 700,
           color: C.ink, letterSpacing: "-0.3px", marginBottom: 6,
         }}>
-          Your full summary, ready to review — so nothing gets missed.
+          Your organized summary is ready.
         </h2>
         <p style={{ fontSize: 13, color: C.inkLight, lineHeight: 1.6, marginBottom: 18 }}>
-          Your receipts organized by category — plus specific things to review before you file.
+          Your receipts are categorized, totals calculated, and key items flagged for review.
         </p>
-        {hiddenInsightsCount > 0 && (
-          <>
-            <div style={{
-              background: "rgba(212,160,23,0.10)",
-              border: "1px solid rgba(212,160,23,0.28)",
-              borderRadius: 10, padding: "11px 14px",
-              fontSize: 13, color: C.ink, lineHeight: 1.5,
-              marginBottom: 8, fontWeight: 600,
-            }}>
-              We found {hiddenInsightsCount} more {hiddenInsightsCount === 1 ? "thing" : "things"} worth reviewing before you file.
-            </div>
-            <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginBottom: 16 }}>
-              Most users catch at least one thing worth fixing.
-            </div>
-          </>
-        )}
-        <div style={{ fontSize: 12, color: C.inkFaint, marginTop: 6 }}>
-          Cheaper than one hour of your accountant's time.
-        </div>
         <div style={{ fontSize: 12, color: C.inkLight, marginTop: 6 }}>
-          {LOSS_LINE_VARIANT === "A"
-            ? "You've already organized everything — download your file so you don't lose it."
-            : "You've already organized everything — don't lose it now."
-          }
+          You've already organized everything — don't leave it behind.
         </div>
 
         {/* Value stack */}
@@ -1516,16 +1527,6 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
           Formatted exactly how most tax professionals prefer to receive expense data.
         </div>
 
-        {/* Soft urgency */}
-        <p style={{ fontSize: 11, color: C.inkFaint, marginBottom: 6, lineHeight: 1.5 }}>
-          Most people download this right after organizing.
-        </p>
-
-        {/* Emotional payoff */}
-        <p style={{ fontSize: 12, color: C.inkFaint, marginBottom: 18, lineHeight: 1.5 }}>
-          Skip the stress of organizing this later — it's already done.
-        </p>
-
         {/* Price */}
         <div style={{
           background: C.creamDark, borderRadius: 11, padding: "11px 14px",
@@ -1535,10 +1536,12 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
           <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 700, color: C.forest }}>$12</div>
         </div>
 
-        {/* Value clarity — sits directly above CTA */}
-        <div style={{ fontSize: 12, color: C.inkLight, textAlign: "center", marginBottom: 10, lineHeight: 1.5 }}>
-          Your full summary includes categorized receipts, totals, and everything worth reviewing.
-        </div>
+        {/* Insight trigger — sits directly above CTA. Shows a new, unrevealed insight when available. */}
+        {paywallInsight && (
+          <div style={{ fontSize: 12, color: C.inkLight, textAlign: "center", marginBottom: 10, lineHeight: 1.5 }}>
+            {paywallInsight.line}
+          </div>
+        )}
 
         {/* Primary CTA */}
         <button
@@ -1572,29 +1575,11 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
               Preparing your summary…
             </>
           ) : (
-            "Download my organized file — $12"
+            "Get my summary — $12"
           )}
         </button>
-        <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
+        <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6, marginBottom: 12 }}>
           One-time $12 — your file downloads right away. Yours to keep — no subscription, no account.
-        </div>
-        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
-          Skip the hours of building this yourself in Excel.
-        </div>
-        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
-          Replaces the spreadsheet you'd normally build before filing.
-        </div>
-        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
-          Formatted the way accountants expect to receive it.
-        </div>
-        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
-          You stay in control — full file unlocked, nothing held back.
-        </div>
-        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
-          We don't store or transmit your receipts — everything stays on your device.
-        </div>
-        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, marginBottom: 12, textAlign: "center" }}>
-          Most freelancers miss deductions when receipts aren't fully organized.
         </div>
 
         <button
@@ -1608,9 +1593,6 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
         {/* Social proof + legal */}
         <div style={{ fontSize: 10, color: C.inkFaint, textAlign: "center", lineHeight: 1.6 }}>
           Used by freelancers and small business owners
-        </div>
-        <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 10 }}>
-          You can download now and decide later — no commitment.
         </div>
         <div style={{
           marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.creamDark}`,
@@ -2084,6 +2066,16 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
       {(() => {
         const { tier1 } = computeInsights(receipts);
         if (tier1.length === 0) return null;
+        // Teaser selection adds a curiosity boost to specific insight ids on top
+        // of conversionScore, so the on-screen teaser is optimized for opening
+        // a loop the paywall can close — not just for raw score order.
+        const teaserInsight = [...tier1].sort((a, b) => {
+          const curiosityBoost = { mileage_gap: 50, subscription_velocity: 40, meals_high_dollar: 35 };
+          return (
+            (b.conversionScore + (curiosityBoost[b.id] || 0)) -
+            (a.conversionScore + (curiosityBoost[a.id] || 0))
+          );
+        })[0];
         return (
           <div style={{
             background: "rgba(212,160,23,0.10)",
@@ -2101,7 +2093,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                 We noticed
               </div>
               <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.55 }}>
-                {tier1[0].line}
+                {teaserInsight.line}
               </div>
             </div>
           </div>
@@ -3189,20 +3181,33 @@ export default function PreFileApp() {
     ws2["A" + headerRow] = { v: "Category",    t: "s", s: tableHeaderFillStyle };
     ws2["B" + headerRow] = { v: "Total",       t: "s", s: { ...tableHeaderFillStyle, alignment: { horizontal: "right", vertical: "center" } } };
     ws2["C" + headerRow] = { v: "% of Spend",  t: "s", s: { ...tableHeaderFillStyle, alignment: { horizontal: "right", vertical: "center" } } };
+    ws2["D" + headerRow] = { v: "Common mapping (verify before filing)", t: "s", s: tableHeaderFillStyle };
 
-    // Category data (sorted by total DESC, top row gets subtle highlight)
+    // Category data (sorted by total DESC, top row gets subtle highlight).
+    // Column D shows the common Schedule C line for the category — see
+    // SCHEDULE_C_REFERENCE for the mapping. Marked clearly as guidance only
+    // via the column header and the disclaimer row below.
     sorted.forEach(([cat, bizAmt], i) => {
       const rowNum = i + 10 + shift;
       const pctOfTotal = grandBiz > 0 ? bizAmt / grandBiz : 0;
       const isTop = i === 0;
+      const reference = SCHEDULE_C_REFERENCE[cat] || "Varies — depends on use, review before filing";
       ws2["A" + rowNum] = { v: cat,        t: "s", ...(isTop ? { s: topCategoryRowStyle } : {}) };
       ws2["B" + rowNum] = { v: bizAmt,     t: "n", z: "$#,##0.00", ...(isTop ? { s: { ...topCategoryRowStyle, alignment: { horizontal: "right" } } } : {}) };
       ws2["C" + rowNum] = { v: pctOfTotal, t: "n", z: "0.0%",      ...(isTop ? { s: { ...topCategoryRowStyle, alignment: { horizontal: "right" } } } : {}) };
+      ws2["D" + rowNum] = { v: reference,  t: "s", ...(isTop ? { s: topCategoryRowStyle } : {}) };
     });
 
-    // Top Categories section — 1 blank row gap, then title, then top 3
-    const lastDataRow = 9 + shift + sorted.length;    // row of last category (or headerRow if empty)
-    const topTitleRow = lastDataRow + 2;              // blank row, then title
+    // Disclaimer + Top Categories section
+    // Layout: data → blank → disclaimer → blank → Top Categories title → top 3
+    const lastDataRow      = 9 + shift + sorted.length;   // row of last category (or headerRow if empty)
+    const disclaimerRow    = lastDataRow + 2;             // blank row, then disclaimer
+    const topTitleRow      = disclaimerRow + 2;           // blank row after disclaimer, then title
+    ws2["A" + disclaimerRow] = {
+      v: "References are provided for general guidance only. Confirm all classifications with a qualified tax professional before filing.",
+      t: "s",
+      s: { font: { italic: true, color: { rgb: "FF8B8B8B" }, name: "Calibri", sz: 10 }, alignment: { horizontal: "left", vertical: "center", wrapText: true } },
+    };
     ws2["A" + topTitleRow] = { v: "Top Categories", t: "s", s: tableHeaderFillStyle };
 
     const topThree = sorted.slice(0, 3);
@@ -3217,8 +3222,8 @@ export default function PreFileApp() {
 
     // Sheet metadata: range, columns, no merges
     const lastRow = topTitleRow + topThree.length;    // last row containing content
-    ws2["!ref"]  = XLSX.utils.encode_range({ s:{c:0,r:0}, e:{c:2,r:lastRow} });
-    ws2["!cols"] = [{ wch: 34 }, { wch: 16 }, { wch: 14 }];
+    ws2["!ref"]  = XLSX.utils.encode_range({ s:{c:0,r:0}, e:{c:3,r:lastRow} });
+    ws2["!cols"] = [{ wch: 34 }, { wch: 16 }, { wch: 14 }, { wch: 38 }];
     ws2["!freeze"] = { ySplit: 1 };
     // No merges, no per-row heights, no fills beyond header — per spec
 
@@ -3407,6 +3412,7 @@ export default function PreFileApp() {
             onDismiss={handlePaywallDismiss}
             receiptCount={receipts.length}
             hiddenInsightsCount={hiddenInsightsCount}
+            receipts={receipts}
           />
         );
       })()}
