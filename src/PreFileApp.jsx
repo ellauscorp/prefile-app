@@ -925,7 +925,7 @@ function Homepage({ onStart, onCheck }) {
           <div style={{ textAlign: "center", marginBottom: 44 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: C.forestLight, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>How it works</div>
             <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: "clamp(24px, 4vw, 36px)", fontWeight: 700, color: C.white, letterSpacing: "-0.4px" }}>Three steps, two minutes</h2>
-            <p style={{ fontSize: 14, color: "rgba(255,255,255,0.65)", marginTop: 12, maxWidth: 560, lineHeight: 1.6 }}>
+            <p style={{ fontSize: 14, color: "rgba(255,255,255,0.65)", maxWidth: 640, lineHeight: 1.6, textAlign: "center", margin: "12px auto 0" }}>
               You don't need to build spreadsheets, guess categories, or organize everything manually. PreFile structures your receipts for you — so you can focus on reviewing, not figuring it out.
             </p>
           </div>
@@ -3152,13 +3152,15 @@ export default function PreFileApp() {
     // Row 3: Byline tagline (small italic, muted gray — uses the existing gap slot)
     ws2["A3"] = { v: "Prepared with PreFile — organized for review before filing.", t: "s", s: summaryBylineStyle };
 
-    // Row 4: Total Business Expenses (label + amount, both bold, B as currency)
-    ws2["A4"] = { v: "Total Business Expenses", t: "s", s: totalLabelStyle };
-    ws2["B4"] = { v: grandBiz, t: "n", s: totalAmountStyle, z: "$#,##0.00" };
+    // Row 4: blank (gap between header block and totals)
 
-    // Row 5: blank
+    // Row 5: Total Business Expenses (label + amount, both bold, B as currency)
+    ws2["A5"] = { v: "Total Business Expenses", t: "s", s: totalLabelStyle };
+    ws2["B5"] = { v: grandBiz, t: "n", s: totalAmountStyle, z: "$#,##0.00" };
 
-    // Rows 6..N (only when there's data): Insights — one per row, full list.
+    // Row 6: blank (gap between totals and insight block)
+
+    // Rows 7..N (only when there's data): Insights — one per row, full list.
     // Uses the shared computeInsights() helper so the paywall teaser count and
     // the exported file are guaranteed to be in sync. The XLSX uses the full
     // .all list (deduped + sorted by priority desc); the paywall pitch uses
@@ -3172,25 +3174,25 @@ export default function PreFileApp() {
 
     insights.forEach((ins, i) => {
       const isRisk = RISK_INSIGHT_IDS.has(ins.id);
-      ws2["A" + (6 + i)] = { v: ins.line, t: "s", s: isRisk ? insightRiskStyle : insightReviewStyle };
+      ws2["A" + (7 + i)] = { v: ins.line, t: "s", s: isRisk ? insightRiskStyle : insightReviewStyle };
     });
     if (sorted.length > 0) {
       const topPct = grandBiz > 0 ? ((sorted[0][1] / grandBiz) * 100).toFixed(0) : 0;
-      ws2["A" + (6 + insightCount)] = { v: `Your highest business spend is ${sorted[0][0]} (${topPct}% of total)`, t: "s", s: insightNeutralStyle };
+      ws2["A" + (7 + insightCount)] = { v: `Your highest business spend is ${sorted[0][0]} (${topPct}% of total)`, t: "s", s: insightNeutralStyle };
     }
 
-    // Row 6 or 7: Section title — Category Breakdown
-    ws2["A" + (6 + shift)] = { v: "Category Breakdown", t: "s", s: tableHeaderStyle };
+    // Blank row between insight block and Category Breakdown — then section title
+    ws2["A" + (8 + shift)] = { v: "Category Breakdown", t: "s", s: tableHeaderStyle };
 
-    // Row 7 or 8: Table headers
-    const headerRow = 7 + shift;
+    // Table headers
+    const headerRow = 9 + shift;
     ws2["A" + headerRow] = { v: "Category",    t: "s", s: tableHeaderFillStyle };
     ws2["B" + headerRow] = { v: "Total",       t: "s", s: { ...tableHeaderFillStyle, alignment: { horizontal: "right", vertical: "center" } } };
     ws2["C" + headerRow] = { v: "% of Spend",  t: "s", s: { ...tableHeaderFillStyle, alignment: { horizontal: "right", vertical: "center" } } };
 
-    // Rows 8+ or 9+: Category data (sorted by total DESC, top row gets subtle highlight)
+    // Category data (sorted by total DESC, top row gets subtle highlight)
     sorted.forEach(([cat, bizAmt], i) => {
-      const rowNum = i + 8 + shift;
+      const rowNum = i + 10 + shift;
       const pctOfTotal = grandBiz > 0 ? bizAmt / grandBiz : 0;
       const isTop = i === 0;
       ws2["A" + rowNum] = { v: cat,        t: "s", ...(isTop ? { s: topCategoryRowStyle } : {}) };
@@ -3199,7 +3201,7 @@ export default function PreFileApp() {
     });
 
     // Top Categories section — 1 blank row gap, then title, then top 3
-    const lastDataRow = 7 + shift + sorted.length;    // row of last category (or headerRow if empty)
+    const lastDataRow = 9 + shift + sorted.length;    // row of last category (or headerRow if empty)
     const topTitleRow = lastDataRow + 2;              // blank row, then title
     ws2["A" + topTitleRow] = { v: "Top Categories", t: "s", s: tableHeaderFillStyle };
 
