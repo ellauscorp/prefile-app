@@ -837,10 +837,14 @@ function Homepage({ onStart, onCheck }) {
               opacity: vis ? 1 : 0, transform: vis ? "none" : "translateY(20px)",
               transition: "opacity 0.5s 0.14s, transform 0.5s 0.14s",
             }}>
-              Organize your receipts in minutes into a clean, structured file you can confidently review or share with your tax professional.
+              If your receipts are scattered across emails, photos, and pockets, PreFile pulls them into one structured file — ready for your accountant or your own review.
             </p>
             <p style={{ fontSize: 12, color: C.inkFaint, marginBottom: 0, marginTop: 6 }}>
               Built for freelancers, small business owners, and side hustlers
+            </p>
+
+            <p style={{ fontSize: 14, color: C.ink, fontWeight: 600, lineHeight: 1.55, marginTop: 22, marginBottom: 16, maxWidth: 460 }}>
+              If you've got a year of receipts and a looming tax deadline — start here.
             </p>
 
             <div style={{
@@ -852,7 +856,7 @@ function Homepage({ onStart, onCheck }) {
                 Organize my receipts →
               </button>
               <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
-                Get organized before filing — so nothing gets missed
+                Free to try · Save your progress as you go
               </div>
               <div>
                 <button className="pf-btn-secondary" onClick={onCheck} style={{ width: "100%" }}>
@@ -873,7 +877,7 @@ function Homepage({ onStart, onCheck }) {
               <span>Not tax advice</span>
             </div>
             <div style={{ marginTop: 6, fontSize: 11, color: C.forestLight, fontWeight: 600, opacity: vis ? 1 : 0, transition: "opacity 0.5s 0.3s" }}>
-              Free to try · Pay only to save and export
+              Pay only to save and export
             </div>
           </div>
 
@@ -1412,7 +1416,7 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
           fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 700,
           color: C.ink, letterSpacing: "-0.3px", marginBottom: 6,
         }}>
-          Review everything clearly before you file — so nothing gets missed.
+          Your full summary, ready to review — so nothing gets missed.
         </h2>
         <p style={{ fontSize: 13, color: C.inkLight, lineHeight: 1.6, marginBottom: 18 }}>
           Your receipts organized by category — plus specific things to review before you file.
@@ -1426,7 +1430,7 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
               fontSize: 13, color: C.ink, lineHeight: 1.5,
               marginBottom: 8, fontWeight: 600,
             }}>
-              We found a few things worth reviewing before you file.
+              We found {hiddenInsightsCount} more {hiddenInsightsCount === 1 ? "thing" : "things"} worth reviewing before you file.
             </div>
             <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginBottom: 16 }}>
               Most users catch at least one thing worth fixing.
@@ -1533,7 +1537,7 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
 
         {/* Value clarity — sits directly above CTA */}
         <div style={{ fontSize: 12, color: C.inkLight, textAlign: "center", marginBottom: 10, lineHeight: 1.5 }}>
-          Your full summary includes categorized receipts, totals, and things worth reviewing.
+          Your full summary includes categorized receipts, totals, and everything worth reviewing.
         </div>
 
         {/* Primary CTA */}
@@ -1565,17 +1569,20 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
               >
                 <path d="M21 12a9 9 0 1 1-6.219-8.56" />
               </svg>
-              Preparing your file…
+              Preparing your summary…
             </>
           ) : (
-            "Unlock my full summary — $12"
+            "Download my organized file — $12"
           )}
         </button>
         <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
-          One-time payment · Instant access · Yours to keep — no subscription
+          One-time $12 — your file downloads right away. Yours to keep — no subscription, no account.
         </div>
         <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
-          You stay in control — review everything before filing.
+          Replaces the spreadsheet most freelancers build themselves before filing.
+        </div>
+        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
+          You stay in control — full file unlocked, nothing held back.
         </div>
         <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, marginBottom: 12, textAlign: "center" }}>
           We don't store or transmit your receipts — everything stays on your device.
@@ -2270,7 +2277,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                     cursor: (receipts.length > 0 && !confirmed) ? "not-allowed" : "pointer",
                   }}
                 >
-                  {isDownloading ? "Downloading..." : "Download organizer →"}
+                  {isDownloading ? "Downloading..." : showDownloadMsg ? "Downloaded ✓" : isSaved ? "Download your file →" : "Download organizer →"}
                 </button>
                 <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
                   Start free — only pay if you download
@@ -2281,6 +2288,17 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                     : "Your receipts are not saved yet — use the button below to download your file."
                   }
                 </div>
+                {isSaved && !showDownloadMsg && (
+                  <div style={{
+                    marginTop: 10, padding: "10px 14px",
+                    background: "rgba(27,94,32,0.08)",
+                    border: "1px solid rgba(27,94,32,0.2)",
+                    borderRadius: 10, fontSize: 13, fontWeight: 700,
+                    color: C.forest, lineHeight: 1.5,
+                  }}>
+                    Your full summary is ready — use the button above to download your file.
+                  </div>
+                )}
                 {showDownloadMsg && (
                   <div style={{
                     marginTop: 10, padding: "10px 14px",
@@ -2289,7 +2307,10 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                     borderRadius: 10, fontSize: 12,
                     color: C.forestMid, lineHeight: 1.5,
                   }}>
-                    ✓ Downloaded — open in Excel and click 'Enable Editing' to use filters and formatting.
+                    ✓ File downloaded — open in Excel, then click “Enable Editing” to use filters and formatting.
+                    <div style={{ marginTop: 6 }}>
+                      Your file includes categorized receipts, totals, and everything worth reviewing.
+                    </div>
                   </div>
                 )}
 
@@ -2728,6 +2749,7 @@ export default function PreFileApp() {
   const [showSavedConfirm, setShowSavedConfirm] = useState(false);
   const [showDownloadMsg, setShowDownloadMsg]   = useState(false);
   const [isDownloading, setIsDownloading]       = useState(false);
+  const isExportingRef = useRef(false);
   const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
   // ── Warn before leaving if receipts exist and not saved ──
@@ -2803,11 +2825,22 @@ export default function PreFileApp() {
     try { doExport(); } catch(e) { console.error(e); }
     setTimeout(() => {
       setIsDownloading(false);
-      setShowDownloadMsg(true);
     }, 1500);
   };
 
   const doExport = () => {
+    // Part 6: empty guard — bail before consuming the export lock
+    if (!receipts || receipts.length === 0) {
+      showToast("Add at least one receipt before downloading.");
+      return;
+    }
+    // Part 1: re-entry guard — prevent double export from rapid clicks or state races
+    if (isExportingRef.current) return;
+    isExportingRef.current = true;
+    // Part 2: reset download confirmation state before this export runs
+    setShowDownloadMsg(false);
+
+    try {
     // ── Helpers ──────────────────────────────────────────────
     // Convert hex #RRGGBB → XLSX ARGB "FF" + RRGGBB (uppercase, no #)
     const toArgb = hex => "FF" + hex.replace("#", "").toUpperCase().padEnd(6, "0");
@@ -3120,7 +3153,8 @@ export default function PreFileApp() {
     // Sheet metadata: range, columns, no merges
     const lastRow = topTitleRow + topThree.length;    // last row containing content
     ws2["!ref"]  = XLSX.utils.encode_range({ s:{c:0,r:0}, e:{c:2,r:lastRow} });
-    ws2["!cols"] = [{ wch: 32 }, { wch: 16 }, { wch: 14 }];
+    ws2["!cols"] = [{ wch: 34 }, { wch: 16 }, { wch: 14 }];
+    ws2["!freeze"] = { ySplit: 1 };
     // No merges, no per-row heights, no fills beyond header — per spec
 
     // ── Build disclaimer / README sheet ──────────────────────
@@ -3165,7 +3199,21 @@ export default function PreFileApp() {
     XLSX.writeFile(wb, "PreFile_Organizer_2025.xlsx");
     logEvent("EXPORT_COMPLETED", { count: receipts.length });
     showToast("Color-coded organizer downloaded ✓");
-    setShowDownloadMsg(true);
+    // Brief delay so the 'Your full summary is ready' callout has time to be
+    // read before the 'Downloaded ✓' callout takes over. The file itself is
+    // already downloading by this point — only the visual confirmation lags.
+    setTimeout(() => setShowDownloadMsg(true), 800);
+    } catch (e) {
+      console.error(e);
+      showToast("Something went wrong — please try downloading again.");
+      isExportingRef.current = false;
+      return;
+    } finally {
+      // Debounce window: prevent rapid re-fires for 1.5s after a successful run.
+      // (On error path, the catch already reset the ref immediately so the
+      // user can retry; this timer is then a harmless no-op.)
+      setTimeout(() => { isExportingRef.current = false; }, 1500);
+    }
   };
 
   const handleUnlock = () => {
