@@ -359,14 +359,14 @@ function computeInsights(receipts) {
       const verb = n === 1 ? "is" : "are";
       insights.push({
         id: "meals_high_dollar", tier: 1, priority: 100, conversionScore: 85,
-        line: `${n} of your meal receipts ${verb} over $75. These typically require documented attendees and a business purpose — without this, they can be disallowed if reviewed.`,
+        line: `${n} of your meal receipts ${verb} over $75. These typically require documented attendees and a business purpose — add these notes before filing, or they can be disallowed if reviewed.`,
       });
     } else {
       const overstateBy = mealsTotal * 0.5;
       const entryWord   = mealReceipts.length === 1 ? "entry" : "entries";
       insights.push({
         id: "meals_50pct", tier: 1, priority: 75, conversionScore: 78,
-        line: `Your meals total $${mealsTotal.toFixed(0)} across ${mealReceipts.length} ${entryWord}. If these are filed at 100%, this could overstate your deductions by about $${overstateBy.toFixed(0)}, since meals are typically only 50% deductible.`,
+        line: `Your meals total $${mealsTotal.toFixed(0)} across ${mealReceipts.length} ${entryWord}. If these are filed at 100%, this could overstate your deductions by about $${overstateBy.toFixed(0)}, since meals are typically only 50% deductible. Check that the meals deduction is filed at 50%, not 100%.`,
       });
     }
   }
@@ -392,7 +392,7 @@ function computeInsights(receipts) {
   if (insuranceTotal === 0 && grandBiz >= 5000) {
     insights.push({
       id: "health_insurance_missing", tier: 1, priority: 90, conversionScore: 95,
-      line: `You have no health insurance recorded. Self-employed freelancers can deduct 100% of health insurance premiums on Schedule 1 — for typical coverage that's $4,800–$9,600 per year. If you pay for your own coverage, this is one of the largest single deductions you can claim.`,
+      line: `You have no health insurance recorded. Self-employed freelancers can deduct 100% of health insurance premiums on Schedule 1 — for typical coverage that's $4,800–$9,600 per year. If you pay for your own coverage, this is one of the largest single deductions you can claim. Add this entry before filing if it applies to you.`,
     });
   }
 
@@ -447,7 +447,7 @@ function computeInsights(receipts) {
         .reduce((s, r) => s + (parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100), 0);
     insights.push({
       id: "home_office_with_signal", tier: 1, priority: 80, conversionScore: 88,
-      line: `You logged $${utilTotal.toFixed(0)} in utilities/internet but no home office expense. If you work from home, the simplified home office deduction is $5/sq ft up to 300 sq ft — up to $1,500/year. This is one of the most commonly missed deductions for freelancers.`,
+      line: `You logged $${utilTotal.toFixed(0)} in utilities/internet but no home office expense. If you work from home, the simplified home office deduction is $5/sq ft up to 300 sq ft — up to $1,500/year. This is one of the most commonly missed deductions for freelancers. Add a home office entry before filing if you qualify.`,
     });
   }
 
@@ -463,7 +463,7 @@ function computeInsights(receipts) {
   if (dupes) {
     insights.push({
       id: "duplicate_entries", tier: 1, priority: 75, conversionScore: 70,
-      line: `You have duplicate entries on ${dupes[0].date}: ${dupes[0].merchant} for $${parseFloat(dupes[0].amount).toFixed(2)}, listed ${dupes.length} times. If this is a duplicate entry, remove it before filing — duplicates inflate your deduction.`,
+      line: `You have duplicate entries on ${dupes[0].date}: ${dupes[0].merchant} for $${parseFloat(dupes[0].amount).toFixed(2)}, listed ${dupes.length} times. If this is a duplicate entry, remove it before filing — duplicates can inflate your deduction.`,
     });
   }
 
@@ -475,7 +475,7 @@ function computeInsights(receipts) {
     const merchants = [...new Set(mixedUse100.map(r => r.merchant))].slice(0, 3).join(", ");
     insights.push({
       id: "mixed_use_100pct", tier: 1, priority: 70, conversionScore: 75,
-      line: `You marked ${mixedUse100.length} purchases from ${merchants} as 100% business. These are merchants where personal use often slips in — if any portion was personal, claiming 100% can be reversed in an audit. Review and adjust the business % where appropriate.`,
+      line: `You marked ${mixedUse100.length} purchases from ${merchants} as 100% business. These are merchants where personal use can slip in — if any portion was personal, claiming 100% may not be allowed if reviewed. Review and adjust the business % where appropriate.`,
     });
   }
 
@@ -487,7 +487,7 @@ function computeInsights(receipts) {
   if (roundedEntries.length >= 3) {
     insights.push({
       id: "rounded_numbers", tier: 1, priority: 65, conversionScore: 80,
-      line: `Several of your entries appear rounded (e.g., $100, $500). Estimated values can draw attention — consider reviewing these against actual receipts.`,
+      line: `Several of your entries appear rounded (e.g., $100, $500). Estimated values may attract questions — consider reviewing these against actual receipts.`,
     });
   }
 
@@ -497,7 +497,7 @@ function computeInsights(receipts) {
     if (mealsPct > 30) {
       insights.push({
         id: "meals_high_ratio", tier: 1, priority: 60, conversionScore: 55,
-        line: `Meals make up ${mealsPct.toFixed(0)}% of your expenses, which is unusually high and may attract scrutiny if not well documented.`,
+        line: `Meals make up ${mealsPct.toFixed(0)}% of your expenses, which is unusually high and may attract questions if not well documented. Confirm each meal entry has a business purpose noted before filing.`,
       });
     }
   }
@@ -540,7 +540,7 @@ function computeInsights(receipts) {
         const gapLabel = gap.length === 1 ? gapStart : `${gapStart}–${gapEnd}`;
         insights.push({
           id: "date_gaps", tier: 2, priority: 50, conversionScore: 45,
-          line: `Your receipts span ${monthName(first)}–${monthName(last)}, but we see a gap in ${gapLabel}. Either no business activity happened then — or receipts from those months aren't logged yet. Missing months can mean unclaimed deductions.`,
+          line: `Your receipts span ${monthName(first)}–${monthName(last)}, but we see a gap in ${gapLabel}. Either no business activity happened then — or receipts from those months aren't logged yet. Review your records for those months before filing — missing months can mean unclaimed deductions.`,
         });
       }
     }
@@ -551,7 +551,7 @@ function computeInsights(receipts) {
   if (topPct >= 40) {
     insights.push({
       id: "category_dominance", tier: 2, priority: 45, conversionScore: 60,
-      line: `${sorted[0][0]} makes up ${topPct.toFixed(0)}% of your expenses — unusually high concentration in one category.`,
+      line: `${sorted[0][0]} makes up ${topPct.toFixed(0)}% of your expenses — unusually high concentration in one category. Confirm accuracy before filing.`,
     });
   }
 
@@ -566,7 +566,7 @@ function computeInsights(receipts) {
     );
     insights.push({
       id: "small_accumulation", tier: 2, priority: 40, conversionScore: 50,
-      line: `You have ${smallEntries.length} small expenses under $10 totaling $${smallTotal.toFixed(0)}. These add up — make sure each is genuinely business-related, since high volumes of small entries can attract scrutiny.`,
+      line: `You have ${smallEntries.length} small expenses under $10 totaling $${smallTotal.toFixed(0)}. These add up — review that each is business-related, since high volumes of small entries can attract questions if reviewed.`,
     });
   }
 
@@ -1579,13 +1579,22 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
           One-time $12 — your file downloads right away. Yours to keep — no subscription, no account.
         </div>
         <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
-          Replaces the spreadsheet most freelancers build themselves before filing.
+          Skip the hours of building this yourself in Excel.
+        </div>
+        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
+          Replaces the spreadsheet you'd normally build before filing.
+        </div>
+        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
+          Formatted the way accountants expect to receive it.
         </div>
         <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
           You stay in control — full file unlocked, nothing held back.
         </div>
-        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, marginBottom: 12, textAlign: "center" }}>
+        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, textAlign: "center" }}>
           We don't store or transmit your receipts — everything stays on your device.
+        </div>
+        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 8, marginBottom: 12, textAlign: "center" }}>
+          Most freelancers miss deductions when receipts aren't fully organized.
         </div>
 
         <button
@@ -2307,9 +2316,18 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                     borderRadius: 10, fontSize: 12,
                     color: C.forestMid, lineHeight: 1.5,
                   }}>
-                    ✓ File downloaded — open in Excel, then click “Enable Editing” to use filters and formatting.
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6, color: C.forest }}>
+                      ✓ Your file is ready
+                    </div>
+                    Open your file in Excel, then click “Enable Editing” to review your summary.
                     <div style={{ marginTop: 6 }}>
-                      Your file includes categorized receipts, totals, and everything worth reviewing.
+                      Your receipts are now organized by category, totals, and review points — ready for filing or your accountant.
+                    </div>
+                    <div style={{ marginTop: 6, fontStyle: "italic" }}>
+                      Some entries may include personal use — review before filing.
+                    </div>
+                    <div style={{ marginTop: 6 }}>
+                      Most users find reviewing everything much faster once it's organized.
                     </div>
                   </div>
                 )}
@@ -3069,22 +3087,60 @@ export default function PreFileApp() {
     const summaryHeaderStyle = {
       font:      { bold: true, color: { rgb: "FF1B5E20" }, name: "Calibri", sz: 14 },
       alignment: { horizontal: "left", vertical: "center" },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFE8F5E9" } },  // very light green tint
     };
     const totalLabelStyle = {
-      font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 11 },
+      font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 12 },
       alignment: { horizontal: "left", vertical: "center" },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFE8F5E9" } },  // very light green tint
     };
     const totalAmountStyle = {
-      font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 11 },
+      font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 12 },
       alignment: { horizontal: "right", vertical: "center" },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFE8F5E9" } },  // very light green tint
     };
     const tableHeaderStyle = {
       font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 11 },
       alignment: { horizontal: "left", vertical: "center" },
     };
+    const tableHeaderFillStyle = {
+      ...tableHeaderStyle,
+      fill:      { patternType: "solid", fgColor: { rgb: "FFF5F5F5" } },  // very light gray
+    };
     const summarySubheaderStyle = {
       font:      { italic: true, color: { rgb: INK }, name: "Calibri", sz: 11 },
       alignment: { horizontal: "left", vertical: "center" },
+    };
+    const summaryBylineStyle = {
+      font:      { italic: true, color: { rgb: "FF8B8B8B" }, name: "Calibri", sz: 10 },
+      alignment: { horizontal: "left", vertical: "center" },
+    };
+    // Insight row styling — gold for "review" (default) vs soft red for "risk" items
+    // (duplicates, overstatements). Fills are intentionally near-white so the sheet
+    // never feels saturated; left borders carry most of the visual grouping.
+    const RISK_INSIGHT_IDS = new Set(["duplicate_entries", "mixed_use_100pct", "rounded_numbers"]);
+    const insightReviewStyle = {
+      font:      { color: { rgb: INK }, name: "Calibri", sz: 11 },
+      alignment: { horizontal: "left", vertical: "center", wrapText: true },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFFFF8E1" } },  // very light amber
+      border:    { left: { style: "thin", color: { rgb: "FFE6A700" } } }, // soft gold
+    };
+    const insightRiskStyle = {
+      font:      { color: { rgb: INK }, name: "Calibri", sz: 11 },
+      alignment: { horizontal: "left", vertical: "center", wrapText: true },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFFFEBEE" } },  // very light red
+      border:    { left: { style: "thin", color: { rgb: "FFC62828" } } }, // soft red
+    };
+    const insightNeutralStyle = {
+      font:      { color: { rgb: INK }, name: "Calibri", sz: 11 },
+      alignment: { horizontal: "left", vertical: "center", wrapText: true },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFF5F5F5" } },  // very light gray
+      border:    { left: { style: "thin", color: { rgb: "FF9E9E9E" } } }, // mid gray
+    };
+    // Top-category-row highlight — the first (largest) row in Category Breakdown
+    const topCategoryRowStyle = {
+      font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 11 },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFFFF8E1" } },  // very light amber
     };
 
     // Row 1: Sheet header (styled)
@@ -3093,7 +3149,8 @@ export default function PreFileApp() {
     // Row 2: Subheader (italic, smaller, muted ink — sits directly under header)
     ws2["A2"] = { v: "Review each section carefully before filing.", t: "s", s: summarySubheaderStyle };
 
-    // Row 3: blank (gap between header block and totals)
+    // Row 3: Byline tagline (small italic, muted gray — uses the existing gap slot)
+    ws2["A3"] = { v: "Prepared with PreFile — organized for review before filing.", t: "s", s: summaryBylineStyle };
 
     // Row 4: Total Business Expenses (label + amount, both bold, B as currency)
     ws2["A4"] = { v: "Total Business Expenses", t: "s", s: totalLabelStyle };
@@ -3114,11 +3171,12 @@ export default function PreFileApp() {
     const shift = insightCount + topLineShift;
 
     insights.forEach((ins, i) => {
-      ws2["A" + (6 + i)] = { v: ins.line, t: "s" };
+      const isRisk = RISK_INSIGHT_IDS.has(ins.id);
+      ws2["A" + (6 + i)] = { v: ins.line, t: "s", s: isRisk ? insightRiskStyle : insightReviewStyle };
     });
     if (sorted.length > 0) {
       const topPct = grandBiz > 0 ? ((sorted[0][1] / grandBiz) * 100).toFixed(0) : 0;
-      ws2["A" + (6 + insightCount)] = { v: `Your highest business spend is ${sorted[0][0]} (${topPct}% of total)`, t: "s" };
+      ws2["A" + (6 + insightCount)] = { v: `Your highest business spend is ${sorted[0][0]} (${topPct}% of total)`, t: "s", s: insightNeutralStyle };
     }
 
     // Row 6 or 7: Section title — Category Breakdown
@@ -3126,28 +3184,33 @@ export default function PreFileApp() {
 
     // Row 7 or 8: Table headers
     const headerRow = 7 + shift;
-    ws2["A" + headerRow] = { v: "Category",    t: "s", s: tableHeaderStyle };
-    ws2["B" + headerRow] = { v: "Total",       t: "s", s: { ...tableHeaderStyle, alignment: { horizontal: "right", vertical: "center" } } };
-    ws2["C" + headerRow] = { v: "% of Spend",  t: "s", s: { ...tableHeaderStyle, alignment: { horizontal: "right", vertical: "center" } } };
+    ws2["A" + headerRow] = { v: "Category",    t: "s", s: tableHeaderFillStyle };
+    ws2["B" + headerRow] = { v: "Total",       t: "s", s: { ...tableHeaderFillStyle, alignment: { horizontal: "right", vertical: "center" } } };
+    ws2["C" + headerRow] = { v: "% of Spend",  t: "s", s: { ...tableHeaderFillStyle, alignment: { horizontal: "right", vertical: "center" } } };
 
-    // Rows 8+ or 9+: Category data (sorted by total DESC, no per-row styling)
+    // Rows 8+ or 9+: Category data (sorted by total DESC, top row gets subtle highlight)
     sorted.forEach(([cat, bizAmt], i) => {
       const rowNum = i + 8 + shift;
       const pctOfTotal = grandBiz > 0 ? bizAmt / grandBiz : 0;
-      ws2["A" + rowNum] = { v: cat,        t: "s" };
-      ws2["B" + rowNum] = { v: bizAmt,     t: "n", z: "$#,##0.00" };
-      ws2["C" + rowNum] = { v: pctOfTotal, t: "n", z: "0.0%" };
+      const isTop = i === 0;
+      ws2["A" + rowNum] = { v: cat,        t: "s", ...(isTop ? { s: topCategoryRowStyle } : {}) };
+      ws2["B" + rowNum] = { v: bizAmt,     t: "n", z: "$#,##0.00", ...(isTop ? { s: { ...topCategoryRowStyle, alignment: { horizontal: "right" } } } : {}) };
+      ws2["C" + rowNum] = { v: pctOfTotal, t: "n", z: "0.0%",      ...(isTop ? { s: { ...topCategoryRowStyle, alignment: { horizontal: "right" } } } : {}) };
     });
 
     // Top Categories section — 1 blank row gap, then title, then top 3
     const lastDataRow = 7 + shift + sorted.length;    // row of last category (or headerRow if empty)
     const topTitleRow = lastDataRow + 2;              // blank row, then title
-    ws2["A" + topTitleRow] = { v: "Top Categories", t: "s", s: tableHeaderStyle };
+    ws2["A" + topTitleRow] = { v: "Top Categories", t: "s", s: tableHeaderFillStyle };
 
     const topThree = sorted.slice(0, 3);
+    const topThreeRowStyle = {
+      font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 11 },
+      alignment: { horizontal: "left", vertical: "center" },
+    };
     topThree.forEach(([cat, bizAmt], i) => {
       const rowNum = topTitleRow + 1 + i;
-      ws2["A" + rowNum] = { v: `#${i + 1} ${cat} — $${bizAmt.toFixed(2)} (${grandBiz > 0 ? ((bizAmt / grandBiz) * 100).toFixed(0) : 0}% of spend)`, t: "s" };
+      ws2["A" + rowNum] = { v: `#${i + 1} ${cat} — $${bizAmt.toFixed(2)} (${grandBiz > 0 ? ((bizAmt / grandBiz) * 100).toFixed(0) : 0}% of spend)`, t: "s", s: topThreeRowStyle };
     });
 
     // Sheet metadata: range, columns, no merges
