@@ -619,6 +619,67 @@ function computeInsights(receipts) {
 }
 
 
+// ── USER-TYPE CLASSIFIER (analytics segmentation only) ─────────────────────
+// Buckets a session into one of three personas based on receipt patterns,
+// purely so logEvent payloads can be segmented downstream. Does NOT alter
+// any visible product behavior — selection logic, copy, and pricing are
+// independent of the result.
+//
+// Heuristics (intentional, but worth periodic recalibration):
+//   - "agency"       → has any contractor expense, OR > $15k total, OR ≥ 6 distinct categories
+//   - "side_hustle"  → < $5k total AND < 20 receipts (both must hold)
+//   - "freelancer"   → catch-all default
+//
+// Known loose signal: the contractor check fires on a single contractor
+// purchase regardless of amount, so a freelancer with one bookkeeper
+// invoice will classify as "agency". Tighten with a $-threshold or
+// count-threshold if/when this distorts segmentation reads.
+function getUserType(receipts) {
+  const total = receipts.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  const hasContractors = receipts.some(r => r.category === "Contractors & services");
+  const categories = new Set(receipts.map(r => r.category));
+
+  if (hasContractors || total > 15000 || categories.size >= 6) {
+    return "agency";
+  }
+  if (total < 5000 && receipts.length < 20) {
+    return "side_hustle";
+  }
+  return "freelancer";
+}
+
+
+// ── INSIGHT PRIORITY MAP (per user type) ────────────────────────────────────
+// Single source of truth for which insight ids to surface in the teaser slot
+// vs. the paywall slot, parameterised by user type from getUserType().
+// Both PaywallModal and OrganizerScreen read from this same constant — keeping
+// the priority lists in one place ensures the no-duplication guarantee holds
+// (paywall filters out whatever the teaser actually showed).
+//
+// Notes:
+//   - Some ids appear in multiple user types' lists with different roles
+//     (e.g. mileage_gap is the side_hustle paywall pick AND the side_hustle
+//     teaser pick — but only one of those will fire per session because the
+//     teaser-exclusion filter removes whichever fired first).
+//   - Agency teaser ids overlap with its paywall ids by design; the
+//     no-duplication filter ensures the paywall falls through to the next
+//     priority id when the teaser already used one.
+const PRIORITY_MAP = {
+  freelancer: {
+    teaser:  ["mileage_gap", "subscription_velocity"],
+    paywall: ["home_office_with_signal", "health_insurance_missing", "meals_high_dollar"],
+  },
+  agency: {
+    teaser:  ["duplicate_entries", "meals_high_dollar"],
+    paywall: ["duplicate_entries", "meals_high_dollar", "health_insurance_missing"],
+  },
+  side_hustle: {
+    teaser:  ["mileage_gap", "mixed_use_100pct"],
+    paywall: ["mixed_use_100pct", "rounded_numbers", "mileage_gap"],
+  },
+};
+
+
 // ── CATEGORY LABEL WITH TOOLTIP ─────────────────────────────────────────────
 function CategoryLabel({ category, size = 12, showIcon = true, style = {} }) {
   const meta = CAT_META[category] || CAT_META["Other"];
@@ -1368,26 +1429,27 @@ function EditScreen({ receipt, onSave, onCancel }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCount = 0, receipts = [] }) {
   const [preparing, setPreparing] = useState(false);
-  // Build a candidate pool from tier1 + tier2, exclude the teaser insight the
-  // user already saw on the Organizer screen, and pick whichever remaining
-  // insight has the highest conversionScore. The teaser is selected with the
-  // same curiosity-weighted comparator OrganizerScreen uses, so this filter
-  // tracks the actual on-screen teaser rather than tier1[0].
+  // Insight selection is driven by user-type-aware priority lists from
+  // PRIORITY_MAP. Both screens compute the same userType from the same
+  // receipts, so they pick the same teaser id deterministically — and the
+  // paywall's unseenInsights filter therefore reliably excludes the teaser
+  // the user just saw.
   const { tier1, tier2 } = computeInsights(receipts);
-  const teaserInsight = tier1.length > 0
-    ? [...tier1].sort((a, b) => {
-        const curiosityBoost = { mileage_gap: 50, subscription_velocity: 40, meals_high_dollar: 35 };
-        return (
-          (b.conversionScore + (curiosityBoost[b.id] || 0)) -
-          (a.conversionScore + (curiosityBoost[a.id] || 0))
-        );
-      })[0]
-    : null;
+  const userType = getUserType(receipts);
+  const teaserInsight =
+    PRIORITY_MAP[userType].teaser
+      .map(id => tier1.find(i => i.id === id))
+      .find(Boolean)
+    || tier1[0]
+    || null;
   const allCandidates = [...tier1, ...tier2];
   const unseenInsights = allCandidates.filter(ins => ins.id !== teaserInsight?.id);
-  const paywallInsight = unseenInsights.length > 0
-    ? [...unseenInsights].sort((a, b) => b.conversionScore - a.conversionScore)[0]
-    : null;
+  const paywallInsight =
+    PRIORITY_MAP[userType].paywall
+      .map(id => unseenInsights.find(i => i.id === id))
+      .find(Boolean)
+    || [...unseenInsights].sort((a, b) => b.conversionScore - a.conversionScore)[0]
+    || null;
   const valueItems = [
     `${receiptCount} receipts organized`,
     "Totals by category",
@@ -1415,8 +1477,7 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
       <div className="slide-up pf-card" style={{
         position: "relative", zIndex: 1,
         maxWidth: 400, width: "100%",
-        padding: "28px 26px",
-        borderRadius: 22,
+        padding: 24,
       }}>
         {/* Close */}
         <button
@@ -1454,13 +1515,10 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
         <p style={{ fontSize: 13, color: C.inkLight, lineHeight: 1.6, marginBottom: 18 }}>
           Your receipts are categorized, totals calculated, and key items flagged for review.
         </p>
-        <div style={{ fontSize: 12, color: C.inkLight, marginTop: 6 }}>
-          You've already organized everything — don't leave it behind.
-        </div>
 
         {/* Value stack */}
         <div style={{ marginBottom: 6 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.inkFaint, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>
+          <div className="pf-label" style={{ marginBottom: 10 }}>
             Your file includes:
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 14 }}>
@@ -1481,16 +1539,23 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
 
         {/* Spreadsheet preview */}
         <div style={{
+          fontSize: 11, fontWeight: 600, color: C.inkFaint,
+          textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6,
+        }}>
+          Preview of your organized summary
+        </div>
+        <div style={{
           border: `1px solid ${C.creamDeep}`, borderRadius: 10,
           overflow: "hidden", marginBottom: 14,
         }}>
           <div style={{
-            background: C.ink, display: "grid",
+            background: "linear-gradient(180deg, #eef6f0 0%, #e6f2ea 100%)", display: "grid",
             gridTemplateColumns: "60px 1fr 1fr 56px",
-            padding: "5px 10px", gap: 6,
+            padding: "10px 8px", gap: 6,
+            borderBottom: "1px solid #d6e8dc",
           }}>
             {["Date","Merchant","Category","Amount"].map(h => (
-              <span key={h} style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
+              <span key={h} style={{ fontSize: 9, fontWeight: 700, color: "#1f5f2e", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
             ))}
           </div>
           {[
@@ -1518,15 +1583,6 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
           </div>
         </div>
 
-        {/* Confidence line */}
-        <div style={{
-          background: "rgba(27,94,32,0.06)", borderRadius: 9,
-          padding: "9px 12px", marginBottom: 8,
-          fontSize: 11, color: C.forestMid, lineHeight: 1.55, fontStyle: "italic",
-        }}>
-          Formatted exactly how most tax professionals prefer to receive expense data.
-        </div>
-
         {/* Price */}
         <div style={{
           background: C.creamDark, borderRadius: 11, padding: "11px 14px",
@@ -1548,7 +1604,7 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
           className="pf-btn-primary"
           onClick={() => {
             if (preparing) return;
-            logEvent("PAY_CLICKED", { count: receiptCount });
+            logEvent("PAY_CLICKED", { count: receiptCount, userType: getUserType(receipts) });
             setPreparing(true);
             // Brief loading transition before paywall closes (lets user see acknowledgment)
             setTimeout(() => onUnlock(), 400);
@@ -1590,10 +1646,7 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
           Continue without saving
         </button>
 
-        {/* Social proof + legal */}
-        <div style={{ fontSize: 10, color: C.inkFaint, textAlign: "center", lineHeight: 1.6 }}>
-          Used by freelancers and small business owners
-        </div>
+        {/* Legal */}
         <div style={{
           marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.creamDark}`,
           fontSize: 10, color: C.inkFaint, lineHeight: 1.55, textAlign: "center",
@@ -2066,16 +2119,16 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
       {(() => {
         const { tier1 } = computeInsights(receipts);
         if (tier1.length === 0) return null;
-        // Teaser selection adds a curiosity boost to specific insight ids on top
-        // of conversionScore, so the on-screen teaser is optimized for opening
-        // a loop the paywall can close — not just for raw score order.
-        const teaserInsight = [...tier1].sort((a, b) => {
-          const curiosityBoost = { mileage_gap: 50, subscription_velocity: 40, meals_high_dollar: 35 };
-          return (
-            (b.conversionScore + (curiosityBoost[b.id] || 0)) -
-            (a.conversionScore + (curiosityBoost[a.id] || 0))
-          );
-        })[0];
+        // Teaser priority is read from the shared PRIORITY_MAP keyed by user
+        // type. Must use the same map (and therefore the same userType) as
+        // PaywallModal so the paywall's no-duplication filter reliably
+        // excludes whichever teaser actually rendered here.
+        const userType = getUserType(receipts);
+        const teaserInsight =
+          PRIORITY_MAP[userType].teaser
+            .map(id => tier1.find(i => i.id === id))
+            .find(Boolean)
+          || tier1[0];
         return (
           <div style={{
             background: "rgba(212,160,23,0.10)",
@@ -2179,9 +2232,9 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
               {/* Preview table */}
               <div style={{ background: C.cream, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.creamDeep}` }}>
                 {/* Header row */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", padding: "8px 14px", background: C.ink }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: "0.07em" }}>Category</span>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: "0.07em" }}>Amount</span>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", padding: "8px 14px", background: "#eef6f0", borderBottom: "1px solid #d6e8dc" }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: "#1f5f2e", textTransform: "uppercase", letterSpacing: "0.07em" }}>Category</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: "#1f5f2e", textTransform: "uppercase", letterSpacing: "0.07em" }}>Amount</span>
                 </div>
                 {Object.entries(byCategory).sort((a, b) => b[1] - a[1]).map(([cat, amt], i) => {
                   const meta = CAT_META[cat] || CAT_META["Other"];
@@ -2269,7 +2322,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                 )}
                 <button
                   className="pf-btn-primary"
-                  onClick={() => { logEvent("PAYWALL_VIEWED", { count: receipts.length }); logEvent("PAYWALL_SHOWN", { count: receipts.length }); setShowPaywall(true); }}
+                  onClick={() => { const userType = getUserType(receipts); logEvent("PAYWALL_VIEWED", { count: receipts.length, userType }); logEvent("PAYWALL_SHOWN", { count: receipts.length, userType }); setShowPaywall(true); }}
                   disabled={isDownloading || (receipts.length > 0 && !confirmed)}
                   style={{
                     width: "100%", fontSize: 14, padding: "13px",
@@ -3076,63 +3129,108 @@ export default function PreFileApp() {
     const grandBiz = grandTotal;
 
     // Reusable styles for this sheet
+    // Color palette (per CPA-ready brief):
+    //   FF1F5F2E — dark green (titles, totals)
+    //   FFF4FAF6 — very light green (totals fill, table-total fill)
+    //   FFEEF6F0 — light green tint (table header fill)
+    //   FFD6E8DC — soft green border
+    //   FFFFFAF0 — soft warm fill (insight rows)
+    //   FFE6B800 — warm gold (insight left border)
+    //   FF4A4A4A — neutral gray (description / disclaimer text)
+    //   FF6B6B6B — section-label gray
+    //   FFFAFAFA — zebra row fill
+    //   FFF0F0F0 — thin row divider
     const summaryHeaderStyle = {
-      font:      { bold: true, color: { rgb: "FF1B5E20" }, name: "Calibri", sz: 14 },
+      font:      { bold: true, color: { rgb: "FF1F5F2E" }, name: "Calibri", sz: 18 },
       alignment: { horizontal: "left", vertical: "center" },
-      fill:      { patternType: "solid", fgColor: { rgb: "FFE8F5E9" } },  // very light green tint
-    };
-    const totalLabelStyle = {
-      font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 12 },
-      alignment: { horizontal: "left", vertical: "center" },
-      fill:      { patternType: "solid", fgColor: { rgb: "FFE8F5E9" } },  // very light green tint
-    };
-    const totalAmountStyle = {
-      font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 12 },
-      alignment: { horizontal: "right", vertical: "center" },
-      fill:      { patternType: "solid", fgColor: { rgb: "FFE8F5E9" } },  // very light green tint
-    };
-    const tableHeaderStyle = {
-      font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 11 },
-      alignment: { horizontal: "left", vertical: "center" },
-    };
-    const tableHeaderFillStyle = {
-      ...tableHeaderStyle,
-      fill:      { patternType: "solid", fgColor: { rgb: "FFF5F5F5" } },  // very light gray
+      fill:      { patternType: "solid", fgColor: { rgb: "FFF4FAF6" } },
     };
     const summarySubheaderStyle = {
-      font:      { italic: true, color: { rgb: INK }, name: "Calibri", sz: 11 },
+      font:      { color: { rgb: "FF4A4A4A" }, name: "Calibri", sz: 11 },
       alignment: { horizontal: "left", vertical: "center" },
     };
     const summaryBylineStyle = {
-      font:      { italic: true, color: { rgb: "FF8B8B8B" }, name: "Calibri", sz: 10 },
+      font:      { italic: true, color: { rgb: "FF4A4A4A" }, name: "Calibri", sz: 10 },
       alignment: { horizontal: "left", vertical: "center" },
     };
+    const totalLabelStyle = {
+      font:      { bold: true, color: { rgb: "FF1F5F2E" }, name: "Calibri", sz: 14 },
+      alignment: { horizontal: "left", vertical: "center" },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFF4FAF6" } },
+      border:    {
+        top:    { style: "thin", color: { rgb: "FFD6E8DC" } },
+        bottom: { style: "thin", color: { rgb: "FFD6E8DC" } },
+        left:   { style: "thin", color: { rgb: "FFD6E8DC" } },
+      },
+    };
+    const totalAmountStyle = {
+      font:      { bold: true, color: { rgb: "FF1F5F2E" }, name: "Calibri", sz: 14 },
+      alignment: { horizontal: "right", vertical: "center" },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFF4FAF6" } },
+      border:    {
+        top:    { style: "thin", color: { rgb: "FFD6E8DC" } },
+        bottom: { style: "thin", color: { rgb: "FFD6E8DC" } },
+        right:  { style: "thin", color: { rgb: "FFD6E8DC" } },
+      },
+    };
+    // Section labels (e.g., "Category Breakdown", "Top Categories")
+    const sectionLabelStyle = {
+      font:      { bold: true, color: { rgb: "FF6B6B6B" }, name: "Calibri", sz: 12 },
+      alignment: { horizontal: "left", vertical: "center" },
+    };
+    const tableHeaderStyle = {
+      font:      { bold: true, color: { rgb: "FF1F5F2E" }, name: "Calibri", sz: 11 },
+      alignment: { horizontal: "left", vertical: "center" },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFEEF6F0" } },
+      border:    { bottom: { style: "thin", color: { rgb: "FFD6E8DC" } } },
+    };
+    const tableHeaderFillStyle = tableHeaderStyle; // alias retained for downstream uses
     // Insight row styling — gold for "review" (default) vs soft red for "risk" items
-    // (duplicates, overstatements). Fills are intentionally near-white so the sheet
-    // never feels saturated; left borders carry most of the visual grouping.
+    // (duplicates, overstatements). Fills stay near-white so the sheet never feels
+    // saturated; the medium left border carries the visual grouping.
     const RISK_INSIGHT_IDS = new Set(["duplicate_entries", "mixed_use_100pct", "rounded_numbers"]);
     const insightReviewStyle = {
-      font:      { color: { rgb: INK }, name: "Calibri", sz: 11 },
+      font:      { color: { rgb: INK }, name: "Calibri", sz: 13 },
       alignment: { horizontal: "left", vertical: "center", wrapText: true },
-      fill:      { patternType: "solid", fgColor: { rgb: "FFFFF8E1" } },  // very light amber
-      border:    { left: { style: "thin", color: { rgb: "FFE6A700" } } }, // soft gold
+      fill:      { patternType: "solid", fgColor: { rgb: "FFFFFAF0" } },  // soft warm tone
+      border:    { left: { style: "medium", color: { rgb: "FFE6B800" } } }, // warm gold, thicker
     };
     const insightRiskStyle = {
-      font:      { color: { rgb: INK }, name: "Calibri", sz: 11 },
+      font:      { color: { rgb: INK }, name: "Calibri", sz: 13 },
       alignment: { horizontal: "left", vertical: "center", wrapText: true },
       fill:      { patternType: "solid", fgColor: { rgb: "FFFFEBEE" } },  // very light red
-      border:    { left: { style: "thin", color: { rgb: "FFC62828" } } }, // soft red
+      border:    { left: { style: "medium", color: { rgb: "FFC62828" } } }, // soft red, thicker
     };
     const insightNeutralStyle = {
-      font:      { color: { rgb: INK }, name: "Calibri", sz: 11 },
+      font:      { color: { rgb: INK }, name: "Calibri", sz: 13 },
       alignment: { horizontal: "left", vertical: "center", wrapText: true },
-      fill:      { patternType: "solid", fgColor: { rgb: "FFF5F5F5" } },  // very light gray
-      border:    { left: { style: "thin", color: { rgb: "FF9E9E9E" } } }, // mid gray
+      fill:      { patternType: "solid", fgColor: { rgb: "FFFFFAF0" } },  // soft warm tone (matches review)
+      border:    { left: { style: "medium", color: { rgb: "FFE6B800" } } }, // warm gold, thicker
     };
     // Top-category-row highlight — the first (largest) row in Category Breakdown
     const topCategoryRowStyle = {
       font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 11 },
       fill:      { patternType: "solid", fgColor: { rgb: "FFFFF8E1" } },  // very light amber
+      border:    { bottom: { style: "thin", color: { rgb: "FFF0F0F0" } } },
+    };
+    // Even / odd zebra striping for the rest of the Category Breakdown rows
+    const tableRowEvenStyle = {
+      font:      { color: { rgb: INK }, name: "Calibri", sz: 11 },
+      alignment: { horizontal: "left", vertical: "center" },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFFFFFFF" } },
+      border:    { bottom: { style: "thin", color: { rgb: "FFF0F0F0" } } },
+    };
+    const tableRowOddStyle = {
+      ...tableRowEvenStyle,
+      fill:      { patternType: "solid", fgColor: { rgb: "FFFAFAFA" } },
+    };
+    const tableAmountEvenStyle = {
+      ...tableRowEvenStyle,
+      alignment: { horizontal: "right", vertical: "center" },
+    };
+    const tableAmountOddStyle = {
+      ...tableRowOddStyle,
+      alignment: { horizontal: "right", vertical: "center" },
     };
 
     // Row 1: Sheet header (styled)
@@ -3174,7 +3272,7 @@ export default function PreFileApp() {
     }
 
     // Blank row between insight block and Category Breakdown — then section title
-    ws2["A" + (8 + shift)] = { v: "Category Breakdown", t: "s", s: tableHeaderStyle };
+    ws2["A" + (8 + shift)] = { v: "Category Breakdown", t: "s", s: sectionLabelStyle };
 
     // Table headers
     const headerRow = 9 + shift;
@@ -3184,18 +3282,26 @@ export default function PreFileApp() {
     ws2["D" + headerRow] = { v: "Common mapping (verify before filing)", t: "s", s: tableHeaderFillStyle };
 
     // Category data (sorted by total DESC, top row gets subtle highlight).
-    // Column D shows the common Schedule C line for the category — see
-    // SCHEDULE_C_REFERENCE for the mapping. Marked clearly as guidance only
-    // via the column header and the disclaimer row below.
+    // Non-top rows alternate fill (zebra striping) for readability; numeric
+    // columns are right-aligned. Column D shows the common Schedule C line
+    // for the category — see SCHEDULE_C_REFERENCE for the mapping. Marked
+    // clearly as guidance only via the column header and the disclaimer
+    // row below.
     sorted.forEach(([cat, bizAmt], i) => {
       const rowNum = i + 10 + shift;
       const pctOfTotal = grandBiz > 0 ? bizAmt / grandBiz : 0;
       const isTop = i === 0;
       const reference = SCHEDULE_C_REFERENCE[cat] || "Varies — depends on use, review before filing";
-      ws2["A" + rowNum] = { v: cat,        t: "s", ...(isTop ? { s: topCategoryRowStyle } : {}) };
-      ws2["B" + rowNum] = { v: bizAmt,     t: "n", z: "$#,##0.00", ...(isTop ? { s: { ...topCategoryRowStyle, alignment: { horizontal: "right" } } } : {}) };
-      ws2["C" + rowNum] = { v: pctOfTotal, t: "n", z: "0.0%",      ...(isTop ? { s: { ...topCategoryRowStyle, alignment: { horizontal: "right" } } } : {}) };
-      ws2["D" + rowNum] = { v: reference,  t: "s", ...(isTop ? { s: topCategoryRowStyle } : {}) };
+      // Style selection: top row keeps amber highlight; remaining rows alternate
+      // white / off-white. Amount columns get right-aligned variants.
+      const labelStyle  = isTop ? topCategoryRowStyle : (i % 2 === 1 ? tableRowOddStyle : tableRowEvenStyle);
+      const amountStyle = isTop
+        ? { ...topCategoryRowStyle, alignment: { horizontal: "right" } }
+        : (i % 2 === 1 ? tableAmountOddStyle : tableAmountEvenStyle);
+      ws2["A" + rowNum] = { v: cat,        t: "s", s: labelStyle };
+      ws2["B" + rowNum] = { v: bizAmt,     t: "n", z: "$#,##0.00", s: amountStyle };
+      ws2["C" + rowNum] = { v: pctOfTotal, t: "n", z: "0.0%",      s: amountStyle };
+      ws2["D" + rowNum] = { v: reference,  t: "s", s: labelStyle };
     });
 
     // Disclaimer + Top Categories section
@@ -3208,7 +3314,7 @@ export default function PreFileApp() {
       t: "s",
       s: { font: { italic: true, color: { rgb: "FF8B8B8B" }, name: "Calibri", sz: 10 }, alignment: { horizontal: "left", vertical: "center", wrapText: true } },
     };
-    ws2["A" + topTitleRow] = { v: "Top Categories", t: "s", s: tableHeaderFillStyle };
+    ws2["A" + topTitleRow] = { v: "Top Categories", t: "s", s: sectionLabelStyle };
 
     const topThree = sorted.slice(0, 3);
     const topThreeRowStyle = {
@@ -3220,12 +3326,30 @@ export default function PreFileApp() {
       ws2["A" + rowNum] = { v: `#${i + 1} ${cat} — $${bizAmt.toFixed(2)} (${grandBiz > 0 ? ((bizAmt / grandBiz) * 100).toFixed(0) : 0}% of spend)`, t: "s", s: topThreeRowStyle };
     });
 
-    // Sheet metadata: range, columns, no merges
+    // Sheet metadata: range, columns, freeze, and per-row heights for breathing room
     const lastRow = topTitleRow + topThree.length;    // last row containing content
     ws2["!ref"]  = XLSX.utils.encode_range({ s:{c:0,r:0}, e:{c:3,r:lastRow} });
     ws2["!cols"] = [{ wch: 34 }, { wch: 16 }, { wch: 14 }, { wch: 38 }];
     ws2["!freeze"] = { ySplit: 1 };
-    // No merges, no per-row heights, no fills beyond header — per spec
+    // Row heights: taller title block, taller totals row, taller insight rows
+    // (so wrapped text breathes), and a slightly taller table header.
+    const rowHeights = [];
+    rowHeights[0]  = { hpt: 28 };  // Row 1 — sheet title
+    rowHeights[1]  = { hpt: 18 };  // Row 2 — subheader
+    rowHeights[2]  = { hpt: 16 };  // Row 3 — byline
+    rowHeights[4]  = { hpt: 24 };  // Row 5 — Total Business Expenses
+    insights.forEach((ins, i) => {
+      // ~36pt base + ~12pt per ~80 chars beyond the first line
+      const len = (ins.line || "").length;
+      const extraLines = Math.max(0, Math.ceil(len / 80) - 1);
+      rowHeights[6 + i] = { hpt: 36 + extraLines * 12 };
+    });
+    if (sorted.length > 0) {
+      rowHeights[6 + insightCount] = { hpt: 28 };  // top-line "highest spend" insight row
+    }
+    rowHeights[8 + shift - 1] = { hpt: 22 };       // Category Breakdown section label
+    rowHeights[9 + shift - 1] = { hpt: 22 };       // table header
+    ws2["!rows"] = rowHeights;
 
     // ── Build disclaimer / README sheet ──────────────────────
     const disclaimerSheet = XLSX.utils.aoa_to_sheet([
@@ -3267,7 +3391,7 @@ export default function PreFileApp() {
     XLSX.utils.book_append_sheet(wb, ws1, "Receipts");
     XLSX.utils.book_append_sheet(wb, ws2, "Summary");
     XLSX.writeFile(wb, "PreFile_Organizer_2025.xlsx");
-    logEvent("EXPORT_COMPLETED", { count: receipts.length });
+    logEvent("EXPORT_COMPLETED", { count: receipts.length, userType: getUserType(receipts) });
     showToast("Color-coded organizer downloaded ✓");
     // Brief delay so the 'Your full summary is ready' callout has time to be
     // read before the 'Downloaded ✓' callout takes over. The file itself is
@@ -3302,11 +3426,12 @@ export default function PreFileApp() {
   };
 
   const handlePaywallDismiss = () => {
-    logEvent("PAYWALL_DISMISSED", { count: receipts.length });
+    const userType = getUserType(receipts);
+    logEvent("PAYWALL_DISMISSED", { count: receipts.length, userType });
     const reason = prompt(
       "Quick question — what made you not download right now?\n\nYou can just type a number or a few words:\n\n1. Too expensive\n2. Not needed\n3. Just testing\n4. Something unclear\n\nOr tell me in your own words:"
     );
-    logEvent("PAYWALL_REASON", { reason: reason?.trim() || "dismissed_no_response" });
+    logEvent("PAYWALL_REASON", { reason: reason?.trim() || "dismissed_no_response", userType });
     setShowPaywall(false);
   };
 
@@ -3387,7 +3512,7 @@ export default function PreFileApp() {
             </span>
           </div>
           <button
-            onClick={() => { logEvent("PAYWALL_VIEWED", { count: receipts.length }); setShowPaywall(true); }}
+            onClick={() => { logEvent("PAYWALL_VIEWED", { count: receipts.length, userType: getUserType(receipts) }); setShowPaywall(true); }}
             style={{
               background: C.forest, color: C.white, border: "none",
               borderRadius: 9, padding: "8px 16px", fontSize: 12,
