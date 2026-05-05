@@ -90,11 +90,11 @@ const PAYWALL_COPY_VARIANT = "A"; // change to "B" to test
 const LOSS_LINE_VARIANT    = "A"; // "A" = current, "B" = tighter version
 
 // ─── LEGAL CONSTANTS ────────────────────────────────────────────────────────
-export const PREFILE_DISCLAIMER = "PreFile is an organizational tool designed to help you collect and structure financial information before filing taxes. It does not provide tax, legal, or financial advice, and does not determine the accuracy or tax treatment of any information. All data, categorizations, and outputs should be reviewed and confirmed by you and/or a qualified tax professional before being used for tax filing or reporting purposes.";
+export const PREFILE_DISCLAIMER = "PreFile prepares structured financial data for your tax professional. It does not file your return, calculate your tax liability, or provide tax, legal, or financial advice. All data, categorizations, and outputs should be reviewed and confirmed by you and a qualified tax professional before being used to prepare or file any tax return.";
 
-export const PREFILE_SHORT_DISCLAIMER = "For organization and review only — not tax advice. Confirm with a qualified tax professional.";
+export const PREFILE_SHORT_DISCLAIMER = "Filing-ready data for your tax professional — not tax advice or a completed return. Confirm with a qualified tax professional.";
 
-export const PREFILE_POSITIONING = "PreFile helps you organize your financial information before filing taxes — so you can review everything clearly and work more efficiently with your tax professional.";
+export const PREFILE_POSITIONING = "PreFile turns scattered receipts into a filing-ready summary for your tax professional — so you arrive at tax time prepared, not reconstructing.";
 
 export const PREFILE_USER_RESPONSIBILITY = "You are responsible for reviewing all entries and confirming their accuracy with a qualified tax professional before filing.";
 
@@ -233,20 +233,50 @@ function suggestCategory(merchant) {
 
 
 // ─── E-COMMERCE TAGGING SYSTEM ──────────────────────────────────────────────
-// Tags are an orthogonal classification layer — they do NOT replace categories.
-// Categories stay simple (15 buckets the user picks from). Tags route specific
-// receipts to the correct Schedule C placement when the category alone can't
-// (e.g. wholesale inventory purchases that the user logs under "Supplies" but
-// should appear in Part III, or promotional samples that should appear under
-// Advertising regardless of how they were categorized).
+// DESIGN CONSTRAINT — READ BEFORE EXTENDING
 //
-// When a tag is present, it OVERRIDES the category-based Schedule C placement
-// in the export. The category still drives UI grouping and color coding; only
-// the export's Schedule C section uses the tag.
+// Tags are an INTERNAL classification layer that exists only to route certain
+// receipts to the correct Schedule C placement in the export. They are NOT
+// a parallel category system, NOT a user-facing taxonomy, and NOT the
+// foundation for accounting features.
 //
-// Single tag per receipt (the five tag values are mutually exclusive in
-// practice — a receipt is either inventory, freight-in, duties, outbound
-// shipping, or promo, not multiple).
+// What tags do:
+//   - Route tagged receipts to a specific Schedule C line in the export
+//     (cogs_inventory / freight_in / import_duties → Part III Purchases;
+//      shipping_out → Line 22; promo_goods → Line 8)
+//   - Override category-based Schedule C placement when present
+//   - Surface as a small dismissible pill on EditScreen so the user can
+//     remove an incorrect auto-suggestion
+//
+// What tags DO NOT do — and should not be extended to do:
+//   - Tags do NOT appear in the category dropdown
+//   - Tags are NOT a second axis of categorization for users to manage
+//   - Tags do NOT track inventory (no beginning/ending balances, no SKUs,
+//     no stock counts, no "on hand" quantities)
+//   - Tags do NOT compute COGS. The Part III bucket holds PURCHASES only —
+//     one of several inputs to the real COGS computation that a tax
+//     preparer performs separately. The export label says exactly that:
+//     "Schedule C Part III — Purchases (one of several COGS inputs)".
+//   - Tags do NOT support multi-tagging. One tag per receipt, max.
+//
+// Why this matters:
+//   PreFile is a structured financial organization system that prepares data
+//   for tax professionals. It is NOT a full accounting system. Adding
+//   inventory tracking, COGS calculation, multi-tagging, or a tag picker UI
+//   would change what the product IS, not just what it can do — and would
+//   break the simple-categorization-experience promise the product makes
+//   to non-accountant users.
+//
+// THIS IS A DESIGN CONSTRAINT, NOT A MISSING FEATURE.
+//
+// If a future contributor needs to:
+//   - Add a new tag value: extend TAG_META and MERCHANT_TAG_HINTS below.
+//     The existing 5 tag values are sufficient for the e-commerce gap;
+//     adding more is a real product decision, not a routine change.
+//   - Add inventory tracking: don't. Talk to the product owner first.
+//   - Add COGS calculation: don't. Talk to the product owner first.
+//   - Expose tags in the UI beyond the existing pill: don't. Talk to the
+//     product owner first.
 const TAG_META = {
   cogs_inventory: {
     label: "Inventory purchase",
@@ -771,7 +801,7 @@ const PRIORITY_MAP = {
     paywall: ["duplicate_entries", "meals_high_dollar", "health_insurance_missing"],
   },
   side_hustle: {
-    teaser:  ["mileage_gap", "mixed_use_100pct"],
+    teaser:  ["mixed_use_100pct", "subscription_velocity"],
     paywall: ["mixed_use_100pct", "rounded_numbers", "mileage_gap"],
   },
 };
@@ -1000,8 +1030,8 @@ function Homepage({ onStart, onCheck }) {
               opacity: vis ? 1 : 0, transform: vis ? "none" : "translateY(20px)",
               transition: "opacity 0.5s 0.07s, transform 0.5s 0.07s",
             }}>
-              Turn scattered receipts into a{" "}
-              <em style={{ color: C.forest, fontStyle: "italic" }}>CPA-ready summary — without spreadsheets</em>
+              Stop reconstructing your year{" "}
+              <em style={{ color: C.forest, fontStyle: "italic" }}>at tax time</em>
             </h1>
 
             <p style={{
@@ -1009,7 +1039,7 @@ function Homepage({ onStart, onCheck }) {
               opacity: vis ? 1 : 0, transform: vis ? "none" : "translateY(20px)",
               transition: "opacity 0.5s 0.14s, transform 0.5s 0.14s",
             }}>
-              If your receipts are scattered across emails, photos, and pockets, PreFile pulls them into one structured file — ready for your accountant or your own review.
+              Turn scattered receipts into a filing-ready summary for your tax professional — so tax time isn't a scramble.
             </p>
             <p style={{ fontSize: 12, color: C.inkFaint, marginBottom: 0, marginTop: 6 }}>
               Built for freelancers, small business owners, and side hustlers
@@ -1096,7 +1126,7 @@ function Homepage({ onStart, onCheck }) {
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 44 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: C.forestLight, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>How it works</div>
-            <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: "clamp(24px, 4vw, 36px)", fontWeight: 700, color: C.white, letterSpacing: "-0.4px" }}>Three steps, two minutes</h2>
+            <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: "clamp(24px, 4vw, 36px)", fontWeight: 700, color: C.white, letterSpacing: "-0.4px" }}>Skip the tax-time scramble</h2>
             <p style={{ fontSize: 14, color: "rgba(255,255,255,0.72)", maxWidth: 640, lineHeight: 1.7, textAlign: "center", margin: "12px auto 0" }}>
               You don't need to build spreadsheets, guess categories, or organize everything manually. PreFile structures your receipts for you — so you can focus on reviewing, not figuring it out.
             </p>
@@ -1105,7 +1135,7 @@ function Homepage({ onStart, onCheck }) {
             {[
               { n:"01", iconName:"receipt", title:"Add your receipts", body:"Photograph, upload, or type in any receipt — meals, software, shipping, phone bills." },
               { n:"02", iconName:"clipboard", title:"PreFile suggests a category", body:"We match common merchants automatically. You confirm or change — you always decide." },
-              { n:"03", iconName:"download", title:"Download your organizer", body:"A clean, color-coded file organized by category — prepared for review by your tax professional." },
+              { n:"03", iconName:"download", title:"Download your organizer", body:"A clean, color-coded summary — filing-ready for your tax professional." },
             ].map((s, i) => (
               <div key={i} style={{ background:"rgba(255,255,255,0.05)", borderRadius:16, padding:"26px 22px", border:"1px solid rgba(255,255,255,0.08)" }}>
                 <div style={{ fontSize:11, fontWeight:700, color:C.forestLight, letterSpacing:"0.1em", marginBottom:10 }}>{s.n}</div>
@@ -1183,7 +1213,7 @@ function Homepage({ onStart, onCheck }) {
       {/* BOTTOM CTA */}
       <section style={{ padding:"68px 24px", background:C.forest, textAlign:"center" }}>
         <h2 style={{ fontFamily:"'Fraunces', serif", fontSize:"clamp(24px,4vw,38px)", fontWeight:700, color:C.white, letterSpacing:"-0.4px", marginBottom:12 }}>
-          Get organized before you file
+          Don't reconstruct it later
         </h2>
         <p style={{ color:"rgba(255,255,255,0.65)", fontSize:15, marginBottom:30, maxWidth:380, margin:"0 auto 30px" }}>
           No account needed. Start adding receipts in seconds.
@@ -1195,7 +1225,7 @@ function Homepage({ onStart, onCheck }) {
           You stay in control — review everything before filing.
         </div>
         <div style={{ marginTop:18, fontSize:11, color:"rgba(255,255,255,0.4)" }}>
-          PreFile is an organizational tool — not tax advice. Always verify with your tax professional.
+          PreFile prepares filing-ready data for your tax professional — not tax advice. Always verify with your tax professional.
         </div>
       </section>
       <DisclaimerFooter />
@@ -1270,7 +1300,7 @@ function AddReceiptScreen({ onMethod, isMobile }) {
       </button>
 
       <div style={{ marginTop:20, fontSize:11, color:C.inkFaint, textAlign:"center" }}>
-        You decide what is deductible · PreFile organizes — not tax advice
+        You decide what is deductible · PreFile prepares the data — not tax advice
       </div>
       <DisclaimerFooter compact />
     </div>
@@ -1278,7 +1308,7 @@ function AddReceiptScreen({ onMethod, isMobile }) {
 }
 
 // STEP 2 — PROCESSING / MANUAL ENTRY
-function ProcessingScreen({ method, onExtracted }) {
+function ProcessingScreen({ method, onExtracted, receipts = [] }) {
   const [phase, setPhase] = useState(method === "manual" ? "manual" : "loading");
   const [manualData, setManualData] = useState({ merchant: "", amount: "", date: new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}), category: "" });
 
@@ -1334,6 +1364,59 @@ function ProcessingScreen({ method, onExtracted }) {
               const suggested = suggestCategory(v);
               setManualData(d => ({ ...d, merchant: v, category: d.category || suggested }));
             }} />
+          {/* Merchant memory: prefix-match suggestions from prior receipts.
+              Renders only when 2+ chars typed AND 2+ unique prior matches available.
+              Tap a row to fill the field. */}
+          {(() => {
+            const typed = (manualData.merchant || "").trim();
+            if (typed.length < 2) return null;
+            const lower = typed.toLowerCase();
+            // Most-recent-first by reversing receipts (later entries are more recent in the stored array)
+            const seen = new Set();
+            const matches = [];
+            for (let i = receipts.length - 1; i >= 0; i--) {
+              const m = (receipts[i].merchant || "").trim();
+              if (!m) continue;
+              const key = m.toLowerCase();
+              if (seen.has(key)) continue;
+              if (key === lower) continue; // exact match isn't a useful suggestion
+              if (!key.startsWith(lower)) continue;
+              seen.add(key);
+              matches.push(m);
+              if (matches.length >= 5) break;
+            }
+            if (matches.length < 2) return null;
+            return (
+              <div style={{
+                marginTop: 6, border: `1px solid ${C.creamDeep}`,
+                borderRadius: 10, overflow: "hidden",
+                background: C.white,
+              }}>
+                {matches.map((m, idx) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => {
+                      const suggested = suggestCategory(m);
+                      setManualData(d => ({ ...d, merchant: m, category: d.category || suggested }));
+                    }}
+                    style={{
+                      display: "block", width: "100%", textAlign: "left",
+                      background: "transparent", border: "none",
+                      padding: "8px 12px", fontSize: 13, color: C.ink,
+                      cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                      borderTop: idx > 0 ? `1px solid ${C.creamDark}` : "none",
+                      transition: "background 0.12s",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = C.cream; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+                  >
+                    <span style={{ color: C.inkLight }}>↳ </span>{m}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
           {manualData.merchant && !manualData.category && (
             <div style={{ fontSize:11, color:C.forest, marginTop:4 }}>
               Suggested based on common patterns (please review): {suggestCategory(manualData.merchant)}
@@ -1490,7 +1573,7 @@ function EditScreen({ receipt, onSave, onCancel }) {
             )}
             {data.tag && TAG_META[data.tag] && (
               <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 6, lineHeight: 1.4 }}>
-                {TAG_META[data.tag].hint}
+                Used for tax grouping — remove if incorrect.
               </div>
             )}
           </div>
@@ -1551,6 +1634,58 @@ function EditScreen({ receipt, onSave, onCancel }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // PAYWALL MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── INSIGHT FORMATTERS (teaser + paywall) ──────────────────────────────────
+// Maps an insight id to display copy for two surfaces:
+//   - TEASER_BY_ID: pre-paywall teaser (curiosity-driven, lightweight, 1 sentence)
+//   - PAYWALL_BY_ID: paywall pre-CTA slot (specific, calm, attributes review
+//     action to the tax professional, 1 sentence)
+//
+// Both formatters accept a `userType` parameter for forward compatibility —
+// the user-type-aware differentiation currently happens upstream in
+// PRIORITY_MAP (which selects WHICH insight is shown per user type), so the
+// copy itself is uniform across user types. If a future iteration wants
+// per-user-type variants (e.g., agency users see audit-defensibility framing
+// of mileage_gap while side_hustle users see correctness framing), wire it
+// through the formatter without changing call sites.
+//
+// Falls back to insight.line (full computeInsights prose) if an id isn't
+// in the map — defense in depth so a new insight can ship without breaking
+// the render path.
+const TEASER_BY_ID = {
+  mileage_gap:              "You may be missing a significant amount of business mileage.",
+  mixed_use_100pct:         "Some expenses may be marked as 100% business when they shouldn't be.",
+  health_insurance_missing: "A major deduction may be missing from your file.",
+  duplicate_entries:        "Duplicate transactions may be inflating your expenses.",
+  subscription_velocity:    "Your subscriptions suggest your yearly totals may be incomplete.",
+  meals_high_dollar:        "Your meals may be higher than typical ranges.",
+  meals_50pct:              "Some meal expenses may need adjustment.",
+  home_office_with_signal:  "You may be missing a home office deduction.",
+};
+const PAYWALL_BY_ID = {
+  mileage_gap:              "Your file flags $1,500–$3,000 in business mileage to review with your tax professional.",
+  health_insurance_missing: "Your file flags self-employed health insurance — typically $4,800–$9,600 — to review with your tax professional.",
+  home_office_with_signal:  "Your file flags a possible home office deduction — up to $1,500 — to review with your tax professional.",
+  meals_high_dollar:        "Your file flags higher-dollar meals to confirm with your tax professional.",
+  mixed_use_100pct:         "Your file flags mixed-use purchases to review with your tax professional.",
+  duplicate_entries:        "Your file flags possible duplicate entries to confirm with your tax professional.",
+  rounded_numbers:          "Your file flags rounded amounts to confirm with your tax professional.",
+  subscription_velocity:    "Your file flags recurring charges that may not be fully captured across the year — to review with your tax professional.",
+  meals_50pct:              "Your file flags meals to confirm at the right deduction percentage with your tax professional.",
+};
+
+// eslint-disable-next-line no-unused-vars
+function formatTeaserInsight(insight, userType) {
+  if (!insight) return "";
+  return TEASER_BY_ID[insight.id] || insight.line || "";
+}
+
+// eslint-disable-next-line no-unused-vars
+function formatPaywallInsight(insight, userType) {
+  if (!insight) return "";
+  return PAYWALL_BY_ID[insight.id] || insight.line || "";
+}
+
 function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCount = 0, receipts = [] }) {
   const [preparing, setPreparing] = useState(false);
   // Insight selection is driven by user-type-aware priority lists from
@@ -1629,37 +1764,16 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
           </svg>
         </div>
 
-        {/* Strong hook headline */}
+        {/* Completion-framed headline — calm, final, no stacked persuasion */}
         <h2 style={{
           fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 700,
           color: C.ink, letterSpacing: "-0.3px", marginBottom: 6,
         }}>
-          Your organized summary is ready.
+          Your filing-ready summary is complete.
         </h2>
         <p style={{ fontSize: 13, color: C.inkLight, lineHeight: 1.6, marginBottom: 18 }}>
-          Your receipts are categorized, totals calculated, and key items flagged for review.
+          This is the version your tax professional actually needs — categorized, totaled, and ready to review. What usually takes 4+ hours of cleanup is already done.
         </p>
-
-        {/* Value stack */}
-        <div style={{ marginBottom: 6 }}>
-          <div className="pf-label" style={{ marginBottom: 10 }}>
-            Your file includes:
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 14 }}>
-            {valueItems.map(item => (
-              <div key={item} style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                <Icon name="checkCircle" size={13} color={C.forest} strokeWidth={2.2} style={{ flexShrink: 0 }} />
-                <span style={{ fontSize: 13, color: C.ink }}>{item}</span>
-              </div>
-            ))}
-          </div>
-          <p style={{ fontSize: 11, color: C.inkFaint, marginTop: 10, marginBottom: 0, lineHeight: 1.5 }}>
-            Everything you enter is saved — your file is always ready to download.
-          </p>
-        </div>
-        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 6 }}>
-          Works with TurboTax, H&amp;R Block, or your accountant
-        </div>
 
         {/* Spreadsheet preview */}
         <div style={{
@@ -1716,10 +1830,10 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
           <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 700, color: C.forest }}>$12</div>
         </div>
 
-        {/* Insight trigger — sits directly above CTA. Shows a new, unrevealed insight when available. */}
+        {/* Calm one-line summary of the strongest insight — sits directly above CTA */}
         {paywallInsight && (
           <div style={{ fontSize: 12, color: C.inkLight, textAlign: "center", marginBottom: 10, lineHeight: 1.5 }}>
-            {paywallInsight.line}
+            {formatPaywallInsight(paywallInsight, userType)}
           </div>
         )}
 
@@ -1755,7 +1869,7 @@ function PaywallModal({ onUnlock, onDismiss, receiptCount = 0, hiddenInsightsCou
               Preparing your summary…
             </>
           ) : (
-            "Get my summary — $12"
+            "Download my filing-ready summary — $12"
           )}
         </button>
         <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6, marginBottom: 12 }}>
@@ -2130,7 +2244,7 @@ function YearEndSummary({ receipts, onBack, onPrint }) {
           {/* ── DISCLAIMER ── */}
           <div style={{ background: C.creamDark, padding: "16px 36px" }}>
             <p style={{ fontSize: 10, color: C.inkFaint, lineHeight: 1.6, margin: 0 }}>
-              <strong>Disclaimer:</strong> PreFile is an organizational tool — not tax advice. All amounts are self-reported estimates.
+              <strong>Disclaimer:</strong> PreFile prepares filing-ready data — not tax advice. All amounts are self-reported estimates.
               Confirm deductibility of each expense with a qualified tax professional before filing. Amounts shown reflect business
               use percentages entered by the user and may not reflect final deductible amounts.
             </p>
@@ -2149,6 +2263,7 @@ function YearEndSummary({ receipts, onBack, onPrint }) {
 
 function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedConfirm, onGenerateSummary, onClearData, onDeleteReceipt, showDownloadMsg, isDownloading }) {
   const [confirmed, setConfirmed] = useState(false);
+  const [monthOpen, setMonthOpen] = useState(false);
   const total = receipts.reduce((s, r) => s + ((parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100)), 0);
   const byCategory = {};
   receipts.forEach(r => {
@@ -2225,6 +2340,31 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
         </div>
       </div>
 
+      {/* Year-to-date running total + items needing review.
+          Year-round continuity signal — calm single line, derived from
+          existing state (no new fields). The "to review" suffix appears
+          only when computeInsights flags items. */}
+      {n > 0 && (() => {
+        const reviewCount = computeInsights(receipts).all.length;
+        return (
+          <div style={{
+            fontSize: 12, color: C.inkLight, marginBottom: 16,
+            letterSpacing: "0.01em", lineHeight: 1.5,
+          }}>
+            <span style={{ color: C.inkFaint, textTransform: "uppercase", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", marginRight: 8 }}>
+              Year to date
+            </span>
+            <span style={{ color: C.ink, fontWeight: 600 }}>
+              ${total.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} business
+            </span>
+            <span style={{ color: C.inkFaint }}> · {n} receipt{n !== 1 ? "s" : ""}</span>
+            {reviewCount > 0 && (
+              <span style={{ color: C.inkFaint }}> · {reviewCount} to review</span>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Soft momentum banner */}
       {momentumMsg && n >= 3 && (
         <div className="fade-in" style={{
@@ -2270,9 +2410,76 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                 We noticed
               </div>
               <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.55 }}>
-                {teaserInsight.line}
+                {formatTeaserInsight(teaserInsight, userType)}
               </div>
             </div>
+          </div>
+        );
+      })()}
+
+      {/* By month — year-round continuity signal. Collapsed by default;
+          computes month-by-month totals from receipts, reverse-chronological. */}
+      {n > 0 && (() => {
+        const byMonth = {};
+        receipts.forEach(r => {
+          const d = new Date(r.date);
+          if (isNaN(d)) return;
+          const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
+          const amt = (parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100);
+          if (!byMonth[key]) byMonth[key] = { total: 0, count: 0, year: d.getFullYear(), month: d.getMonth() };
+          byMonth[key].total += amt;
+          byMonth[key].count += 1;
+        });
+        const months = Object.values(byMonth).sort((a, b) => {
+          if (a.year !== b.year) return b.year - a.year;
+          return b.month - a.month;
+        });
+        if (months.length === 0) return null;
+        const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        return (
+          <div style={{
+            border: `1px solid ${C.creamDeep}`, borderRadius: 11,
+            marginBottom: 20, overflow: "hidden",
+          }}>
+            <button
+              onClick={() => setMonthOpen(o => !o)}
+              type="button"
+              style={{
+                width: "100%", display: "flex", alignItems: "center",
+                justifyContent: "space-between", gap: 10,
+                background: monthOpen ? C.cream : "transparent",
+                border: "none", padding: "11px 16px",
+                cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                transition: "background 0.15s",
+              }}
+              onMouseEnter={e => { if (!monthOpen) e.currentTarget.style.background = C.cream; }}
+              onMouseLeave={e => { if (!monthOpen) e.currentTarget.style.background = "transparent"; }}
+            >
+              <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>
+                By month
+              </span>
+              <span style={{ fontSize: 11, color: C.inkFaint, fontWeight: 500 }}>
+                {months.length} month{months.length !== 1 ? "s" : ""} {monthOpen ? "▴" : "▾"}
+              </span>
+            </button>
+            {monthOpen && (
+              <div style={{ borderTop: `1px solid ${C.creamDeep}`, padding: "8px 0" }}>
+                {months.map(m => (
+                  <div key={`${m.year}-${m.month}`} style={{
+                    display: "flex", justifyContent: "space-between",
+                    padding: "6px 16px", fontSize: 12, color: C.inkLight,
+                  }}>
+                    <span>{monthNames[m.month]} {m.year}</span>
+                    <span>
+                      <span style={{ color: C.ink, fontWeight: 600 }}>
+                        ${m.total.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                      </span>
+                      <span style={{ color: C.inkFaint }}> across {m.count} receipt{m.count !== 1 ? "s" : ""}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
       })()}
@@ -2474,7 +2681,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                     borderRadius: 10, fontSize: 13, fontWeight: 700,
                     color: C.forest, lineHeight: 1.5,
                   }}>
-                    Your full summary is ready — use the button above to download your file.
+                    Your filing-ready summary is ready — use the button above to download.
                   </div>
                 )}
                 {showDownloadMsg && (
@@ -2893,7 +3100,7 @@ function CheckReveal({ answers, onContinue }) {
         Continue organizing my receipts →
       </button>
       <div style={{ marginTop: 12, fontSize: 11, color: C.inkFaint, textAlign: "center" }}>
-        PreFile is an organizational tool — not tax advice · Always verify with your tax professional
+        PreFile prepares filing-ready data for your tax professional — not tax advice · Always verify with your tax professional
       </div>
     </div>
   );
@@ -2998,7 +3205,7 @@ export default function PreFileApp() {
   const renderReceiptFlow = () => {
     switch (receiptStep) {
       case "add":        return <AddReceiptScreen onMethod={handleMethod} isMobile={isMobile} />;
-      case "processing": return <ProcessingScreen method={method} onExtracted={handleExtracted} />;
+      case "processing": return <ProcessingScreen method={method} onExtracted={handleExtracted} receipts={receipts} />;
       case "confirm":    return <ConfirmScreen receipt={pendingReceipt} onConfirm={handleConfirm} onEdit={handleEdit} />;
       case "edit":       return <EditScreen receipt={pendingReceipt} onSave={handleSaveEdit} onCancel={() => setReceiptStep("confirm")} />;
       default:           return null;
@@ -3114,7 +3321,7 @@ export default function PreFileApp() {
     const sortedCats = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
     const grandBiz = grandTotal;
 
-    // Schedule C line totals — now tag-aware. Each receipt is routed to its
+    // Schedule C line totals — tag-aware. Each receipt is routed to its
     // EFFECTIVE Schedule C line: if the receipt has a tag (cogs_inventory,
     // freight_in, etc.), the tag's mapping wins; otherwise the category's
     // mapping is used. This means a "Supplies" receipt tagged as
@@ -3136,7 +3343,7 @@ export default function PreFileApp() {
       const meta = r.tag && TAG_META[r.tag];
       return meta ? `${meta.label} (was ${r.category})` : r.category;
     };
-    const lineTotals = {}; // { line/section: { total, items: [{ displayCategory, amount, receipts }] } }
+    const lineTotals = {}; // { line/section: { total, items: { displayCategory: { amount, receipts } } } }
     receipts.forEach(r => {
       const amt = parseFloat(r.amount) || 0;
       const bizAmt = amt * ((r.businessPct || 100) / 100);
@@ -3280,7 +3487,7 @@ export default function PreFileApp() {
     const wsMaster = {};
     wsMaster["A1"] = { v: "PreFile Organizer — Master Summary", t: "s", s: titleStyle };
     wsMaster["A2"] = { v: "Tax Year 2025  ·  Prepared " + preparedDate, t: "s", s: subheaderStyle };
-    wsMaster["A3"] = { v: "Organizational summary based on receipts entered. Confirm all amounts with your tax preparer.", t: "s", s: bylineStyle };
+    wsMaster["A3"] = { v: "Filing-ready summary for your tax professional. Confirm all amounts before filing.", t: "s", s: bylineStyle };
 
     // Key totals (rows 5–7)
     wsMaster["A5"] = { v: "Total Business Expenses", t: "s", s: totalLabelStyle };
@@ -3595,7 +3802,7 @@ export default function PreFileApp() {
       // No flags case — still render an empty-state row so the sheet isn't blank
       wsReview["A" + revRow] = { v: "No flags raised", t: "s", s: flagIssueStyle };
       wsReview["B" + revRow] = { v: "No issues were detected in the receipts you logged. This does not mean the return is complete — confirm all categories and totals with your tax professional.", t: "s", s: flagBodyStyle };
-      wsReview["C" + revRow] = { v: "Proceed to your tax preparer with this workbook.", t: "s", s: flagBodyStyle };
+      wsReview["C" + revRow] = { v: "This workbook is ready to take to your tax professional.", t: "s", s: flagBodyStyle };
       revRow++;
     } else {
       insightsForReview.forEach((ins) => {
@@ -3651,9 +3858,9 @@ export default function PreFileApp() {
 
     // ── Build disclaimer / README sheet ──────────────────────
     const disclaimerSheet = XLSX.utils.aoa_to_sheet([
-      ["PreFile Organizer — For Preparation & Review Only"],
+      ["PreFile Organizer — Filing-Ready Summary"],
       [""],
-      ["This workbook is an organized summary of business expenses based on receipts you entered. It is not a completed tax return."],
+      ["This workbook is a filing-ready summary of your business expenses, prepared for your tax professional. It is not a completed tax return — your tax professional finalizes and files it."],
       [""],
       ["What's inside:"],
       ["  • Master Summary — top totals, top categories, sheet navigator"],
@@ -3667,7 +3874,7 @@ export default function PreFileApp() {
     ]);
     // Header styling — A1 only (bold, larger, dark green)
     disclaimerSheet["A1"] = {
-      v: "PreFile Organizer — For Preparation & Review Only",
+      v: "PreFile Organizer — Filing-Ready Summary",
       t: "s",
       s: {
         font: { bold: true, color: { rgb: "FF1F5F2E" }, name: "Calibri", sz: 14 },
@@ -3710,7 +3917,7 @@ export default function PreFileApp() {
     XLSX.writeFile(wb, "PreFile_Organizer_2025.xlsx");
     logEvent("EXPORT_COMPLETED", { count: receipts.length, userType: getUserType(receipts) });
     showToast("Color-coded organizer downloaded ✓");
-    // Brief delay so the 'Your full summary is ready' callout has time to be
+    // Brief delay so the 'Your filing-ready summary is ready' callout has time to be
     // read before the 'Downloaded ✓' callout takes over. The file itself is
     // already downloading by this point — only the visual confirmation lags.
     setTimeout(() => setShowDownloadMsg(true), 800);
@@ -3734,7 +3941,7 @@ export default function PreFileApp() {
     setShowSavedConfirm(true);
     setTimeout(() => setShowSavedConfirm(false), 2500);
     setTimeout(() => {
-      showToast("Your full summary is ready — download starting…");
+      showToast("Your filing-ready summary is ready — download starting…");
       Promise.resolve().then(() => doExport());
     }, 600);
     setTimeout(() => {
