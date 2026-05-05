@@ -2340,6 +2340,74 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
         </div>
       </div>
 
+      {/* This month + nudge — lightweight monthly habit loop.
+          Calm continuity signals only; no notifications, streaks, or progress UI.
+          Renders alongside YTD when there's any logging history. */}
+      {n > 0 && (() => {
+        const now = new Date();
+        const curYear = now.getFullYear();
+        const curMonth = now.getMonth();
+        // Receipts in the current calendar month (business-weighted, same as YTD)
+        let monthTotal = 0;
+        let monthCount = 0;
+        // Track most recent receipt date to detect a 2+ month gap when current month is empty
+        let mostRecent = null;
+        receipts.forEach(r => {
+          const d = new Date(r.date);
+          if (isNaN(d)) return;
+          if (!mostRecent || d > mostRecent) mostRecent = d;
+          if (d.getFullYear() === curYear && d.getMonth() === curMonth) {
+            const amt = (parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100);
+            monthTotal += amt;
+            monthCount += 1;
+          }
+        });
+
+        // Compute nudge text. Three mutually-exclusive branches:
+        //   (a) this month has receipts → count message
+        //   (b) this month empty AND last receipt was 2+ months ago → name missed month
+        //   (c) this month empty AND no real gap → calm "yet" message
+        const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+        let nudge;
+        if (monthCount > 0) {
+          nudge = `You've logged ${monthCount} receipt${monthCount !== 1 ? "s" : ""} this month`;
+        } else if (mostRecent) {
+          // Months elapsed since most recent receipt (calendar-month difference)
+          const monthsAgo = (curYear - mostRecent.getFullYear()) * 12 + (curMonth - mostRecent.getMonth());
+          if (monthsAgo >= 2) {
+            // The "last missing month" is the calendar month immediately before the current one.
+            // Naming it as the gap reads more naturally than naming the most-recent-logged month.
+            const gapMonth = curMonth === 0 ? 11 : curMonth - 1;
+            const gapYear  = curMonth === 0 ? curYear - 1 : curYear;
+            nudge = `Nothing logged in ${monthNames[gapMonth]} ${gapYear}`;
+          } else {
+            nudge = "No receipts logged this month yet";
+          }
+        } else {
+          nudge = "No receipts logged this month yet";
+        }
+
+        return (
+          <>
+            <div style={{
+              fontSize: 12, color: C.inkLight, marginBottom: 4,
+              letterSpacing: "0.01em", lineHeight: 1.5,
+            }}>
+              <span style={{ color: C.inkFaint, textTransform: "uppercase", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", marginRight: 8 }}>
+                This month
+              </span>
+              <span style={{ color: C.ink, fontWeight: 600 }}>
+                ${monthTotal.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </span>
+              <span style={{ color: C.inkFaint }}> · {monthCount} receipt{monthCount !== 1 ? "s" : ""}</span>
+            </div>
+            <div style={{ fontSize: 11, color: C.inkFaint, marginBottom: 14, lineHeight: 1.5 }}>
+              {nudge}
+            </div>
+          </>
+        );
+      })()}
+
       {/* Year-to-date running total + items needing review.
           Year-round continuity signal — calm single line, derived from
           existing state (no new fields). The "to review" suffix appears
@@ -2413,6 +2481,159 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                 {formatTeaserInsight(teaserInsight, userType)}
               </div>
             </div>
+          </div>
+        );
+      })()}
+
+      {/* MASTER SUMMARY preview — document-style block.
+          Mirrors the export's Master Summary sheet to give users a
+          completion-confidence artifact before downloading. All data
+          derived from existing state (receipts + computeInsights +
+          SCHEDULE_C_REFERENCE); no new fields, no interaction.
+          Uses formatPaywallInsight for Review & Flags — the document-
+          style surface needs the calmer "Your file flags..." voice,
+          not the curiosity-shaped teaser voice. */}
+      {n > 0 && (() => {
+        const userType = getUserType(receipts);
+
+        // Tax year: most recent receipt's year, fallback to current year
+        let taxYear = new Date().getFullYear();
+        let mostRecentDate = null;
+        receipts.forEach(r => {
+          const d = new Date(r.date);
+          if (isNaN(d)) return;
+          if (!mostRecentDate || d > mostRecentDate) mostRecentDate = d;
+        });
+        if (mostRecentDate) taxYear = mostRecentDate.getFullYear();
+
+        // Top 5 categories by business-weighted total
+        const catTotals = {};
+        receipts.forEach(r => {
+          const amt = (parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100);
+          catTotals[r.category] = (catTotals[r.category] || 0) + amt;
+        });
+        const topCategories = Object.entries(catTotals)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5);
+
+        // Top 2-3 insights via paywall formatter (document-tone, not teaser-tone)
+        const allInsights = computeInsights(receipts).all || [];
+        const flagsToShow = allInsights.slice(0, 3);
+
+        // Document-feel typography helper
+        const docLabelStyle = {
+          fontSize: 10, fontWeight: 700, color: C.inkFaint,
+          textTransform: "uppercase", letterSpacing: "0.08em",
+          marginBottom: 10,
+        };
+
+        return (
+          <div style={{
+            background: C.white,
+            borderTop: `3px solid ${C.forest}`,
+            border: `1px solid ${C.creamDeep}`,
+            borderTopColor: C.forest,
+            padding: "22px 26px",
+            marginBottom: 20,
+            maxWidth: "100%",
+          }}>
+            {/* Header row */}
+            <div style={{
+              display: "flex", justifyContent: "space-between",
+              alignItems: "baseline", flexWrap: "wrap", gap: 8,
+              marginBottom: 4,
+            }}>
+              <div style={{
+                fontFamily: "'Fraunces', serif", fontSize: 20, fontWeight: 700,
+                color: C.ink, letterSpacing: "-0.3px",
+              }}>
+                Master Summary
+              </div>
+              <div style={{
+                fontSize: 11, fontStyle: "italic", color: C.forest,
+                letterSpacing: "0.02em",
+              }}>
+                Ready for Review
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: C.inkFaint, marginBottom: 22 }}>
+              Business · Tax Year {taxYear}
+            </div>
+
+            {/* Quick Overview — three-row label/value grid.
+                Net Profit visibly present but rendered as "—" since PreFile
+                doesn't track income. Maintains CPA-expected structure while
+                being honest about the data gap. */}
+            <div style={docLabelStyle}>Quick Overview</div>
+            <div style={{ marginBottom: 22 }}>
+              {[
+                ["Total Income",   "— (not tracked)"],
+                ["Total Expenses", `$${total.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`],
+                ["Net Profit",     "— (income not tracked)"],
+              ].map(([label, value]) => (
+                <div key={label} style={{
+                  display: "flex", justifyContent: "space-between",
+                  padding: "5px 0", fontSize: 13,
+                  borderBottom: `1px solid ${C.creamDark}`,
+                }}>
+                  <span style={{ color: C.inkLight }}>{label}</span>
+                  <span style={{
+                    color: value.startsWith("—") ? C.inkFaint : C.ink,
+                    fontWeight: value.startsWith("—") ? 400 : 600,
+                    fontStyle: value.startsWith("—") ? "italic" : "normal",
+                  }}>
+                    {value}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Schedule C Snapshot — top 5 rows: Category · IRS Line · Amount */}
+            <div style={docLabelStyle}>Schedule C Snapshot</div>
+            <div style={{ marginBottom: flagsToShow.length > 0 ? 22 : 4 }}>
+              {topCategories.map(([cat, amount]) => {
+                const ref = SCHEDULE_C_REFERENCE[cat] || "Varies";
+                // Compact line label: "Schedule C Line 22" → "Line 22"; "Varies — …" → "Varies"
+                const lineCompact = ref.startsWith("Schedule C ")
+                  ? ref.replace(/^Schedule C /, "")
+                  : ref.startsWith("Varies")
+                    ? "Varies"
+                    : ref;
+                return (
+                  <div key={cat} style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr auto auto",
+                    gap: 16,
+                    padding: "5px 0", fontSize: 13,
+                    borderBottom: `1px solid ${C.creamDark}`,
+                    alignItems: "baseline",
+                  }}>
+                    <span style={{ color: C.ink }}>{cat}</span>
+                    <span style={{ color: C.inkFaint, fontSize: 11 }}>{lineCompact}</span>
+                    <span style={{ color: C.ink, fontWeight: 600, minWidth: 70, textAlign: "right" }}>
+                      ${amount.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Review & Flags — top 2-3 insight summaries via paywall formatter */}
+            {flagsToShow.length > 0 && (
+              <>
+                <div style={docLabelStyle}>Review &amp; Flags</div>
+                <div>
+                  {flagsToShow.map((ins, i) => (
+                    <div key={ins.id || i} style={{
+                      fontSize: 13, color: C.inkLight, lineHeight: 1.6,
+                      padding: "4px 0",
+                    }}>
+                      {formatPaywallInsight(ins, userType)}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         );
       })()}
