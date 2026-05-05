@@ -43,22 +43,28 @@ const CATEGORIES = [
 // rather than presented with an inferred line number.
 // This is COMMON MAPPING, not tax advice — see the disclaimer rendered below
 // the Category Breakdown table in the exported XLSX.
+// Mapping of internal category names to Schedule C lines. Where IRS guidance
+// is unambiguous for the category as named, the specific line is given. Where
+// the category covers multiple potential lines (e.g., Equipment may be
+// expensed or depreciated depending on cost), the value is "Varies". The
+// export sheet renders "Varies" entries in their own bucket so a preparer
+// sees them separately from line-mapped totals.
 const SCHEDULE_C_REFERENCE = {
   "Advertising & marketing": "Schedule C Line 8",
-  "Car & mileage":           "Varies — depends on use, review before filing",
-  "Contractors & services":  "Varies — depends on use, review before filing",
+  "Car & mileage":           "Schedule C Line 9",
+  "Contractors & services":  "Schedule C Line 11",
   "Insurance":               "Schedule C Line 15",
-  "Legal & professional":    "Varies — depends on use, review before filing",
-  "Office expenses":         "Varies — depends on use, review before filing",
+  "Legal & professional":    "Schedule C Line 17",
+  "Office expenses":         "Schedule C Line 18",
   "Rent / workspace":        "Schedule C Line 20b",
   "Supplies":                "Schedule C Line 22",
-  "Taxes & licenses":        "Varies — depends on use, review before filing",
+  "Taxes & licenses":        "Schedule C Line 23",
   "Travel":                  "Schedule C Line 24a",
   "Business meals":          "Schedule C Line 24b",
   "Utilities":               "Schedule C Line 25",
-  "Software & subscriptions":"Varies — depends on use, review before filing",
-  "Equipment & tools":       "Varies — depends on use, review before filing",
-  "Other":                   "Varies — depends on use, review before filing",
+  "Software & subscriptions":"Schedule C Line 27a",
+  "Equipment & tools":       "Varies — depends on cost & expected life, review before filing",
+  "Other":                   "Varies — review before filing",
 };
 
 
@@ -223,6 +229,97 @@ function suggestCategory(merchant) {
     if (lower.includes(key)) return cat;
   }
   return "Other";
+}
+
+
+// ─── E-COMMERCE TAGGING SYSTEM ──────────────────────────────────────────────
+// Tags are an orthogonal classification layer — they do NOT replace categories.
+// Categories stay simple (15 buckets the user picks from). Tags route specific
+// receipts to the correct Schedule C placement when the category alone can't
+// (e.g. wholesale inventory purchases that the user logs under "Supplies" but
+// should appear in Part III, or promotional samples that should appear under
+// Advertising regardless of how they were categorized).
+//
+// When a tag is present, it OVERRIDES the category-based Schedule C placement
+// in the export. The category still drives UI grouping and color coding; only
+// the export's Schedule C section uses the tag.
+//
+// Single tag per receipt (the five tag values are mutually exclusive in
+// practice — a receipt is either inventory, freight-in, duties, outbound
+// shipping, or promo, not multiple).
+const TAG_META = {
+  cogs_inventory: {
+    label: "Inventory purchase",
+    schCLine: "Schedule C Line 36",
+    section: "Schedule C Part III — Purchases (one of several COGS inputs)",
+    hint: "Looks like wholesale inventory — flagged for Schedule C Part III.",
+  },
+  freight_in: {
+    label: "Inbound freight",
+    schCLine: "Schedule C Line 36",
+    section: "Schedule C Part III — Purchases (one of several COGS inputs)",
+    hint: "Looks like inbound freight from a supplier — flagged for Schedule C Part III.",
+  },
+  import_duties: {
+    label: "Import duties",
+    schCLine: "Schedule C Line 36",
+    section: "Schedule C Part III — Purchases (one of several COGS inputs)",
+    hint: "Looks like customs / import duties — flagged for Schedule C Part III.",
+  },
+  shipping_out: {
+    label: "Shipping to customer",
+    schCLine: "Schedule C Line 22",
+    section: null, // routes into the standard Supplies group
+    hint: "Looks like outbound shipping — flagged as a delivery expense.",
+  },
+  promo_goods: {
+    label: "Free sample / promo",
+    schCLine: "Schedule C Line 8",
+    section: null, // routes into the standard Advertising group
+    hint: "Looks like promotional goods — flagged as advertising.",
+  },
+};
+
+// Merchant substring → tag. Conservative: only fires when the substring is a
+// strong signal. USPS / FedEx / UPS by themselves are NOT tagged (could be
+// outbound shipping, office mail, customs pickup); only tag when paired with
+// shipping context like "label" or "shipping". Same logic for the others.
+const MERCHANT_TAG_HINTS = [
+  // Inventory: wholesale marketplaces and direct supplier names
+  { match: /\bfaire\b/i,            tag: "cogs_inventory" },
+  { match: /\balibaba\b/i,          tag: "cogs_inventory" },
+  { match: /\baliexpress\b/i,       tag: "cogs_inventory" },
+  { match: /\bflorence leather\b/i, tag: "cogs_inventory" },
+  { match: /\bwholesale\b/i,        tag: "cogs_inventory" },
+  // Inbound freight: international couriers in shipping contexts
+  { match: /\bfreight\b/i,          tag: "freight_in" },
+  { match: /\bcargo\b/i,            tag: "freight_in" },
+  { match: /\bdhl\b.*\b(import|inbound|international)\b/i, tag: "freight_in" },
+  // Import duties / customs
+  { match: /\bcustoms\b/i,          tag: "import_duties" },
+  { match: /\bduty\b/i,             tag: "import_duties" },
+  { match: /\btariff\b/i,           tag: "import_duties" },
+  { match: /\bcbp\b/i,              tag: "import_duties" }, // U.S. Customs and Border Protection
+  // Outbound shipping: shipping platforms + carrier+context patterns
+  { match: /\bshipstation\b/i,      tag: "shipping_out" },
+  { match: /\bpirate ship\b/i,      tag: "shipping_out" },
+  { match: /\beasypost\b/i,         tag: "shipping_out" },
+  { match: /\bstamps\.com\b/i,      tag: "shipping_out" },
+  { match: /\b(usps|ups|fedex)\b.*\b(label|shipping|parcel|outbound|priority mail)\b/i, tag: "shipping_out" },
+  // Promo goods / samples
+  { match: /\bsample(s)?\b/i,       tag: "promo_goods" },
+  { match: /\bpromo(tional)?\b/i,   tag: "promo_goods" },
+  { match: /\bgiveaway\b/i,         tag: "promo_goods" },
+  { match: /\bswag\b/i,             tag: "promo_goods" },
+];
+
+// Returns a tag id or null. Conservative — null means "no tag," not "Other."
+function suggestTag(merchant) {
+  if (!merchant) return null;
+  for (const { match, tag } of MERCHANT_TAG_HINTS) {
+    if (match.test(merchant)) return tag;
+  }
+  return null;
 }
 
 const SAMPLE_MERCHANTS = [
@@ -1191,7 +1288,7 @@ function ProcessingScreen({ method, onExtracted }) {
       const t2 = setTimeout(() => {
         // Pick a random sample receipt as mock extraction
         const sample = SAMPLE_MERCHANTS[Math.floor(Math.random() * SAMPLE_MERCHANTS.length)];
-        onExtracted({ ...sample, id: Date.now(), businessPct: 100 });
+        onExtracted({ ...sample, tag: suggestTag(sample.merchant), id: Date.now(), businessPct: 100 });
       }, 2400);
       return () => { clearTimeout(t1); clearTimeout(t2); };
     }
@@ -1215,7 +1312,8 @@ function ProcessingScreen({ method, onExtracted }) {
   const handleManualSubmit = () => {
     if (!manualData.merchant || !manualData.amount) return;
     const cat = manualData.category || suggestCategory(manualData.merchant);
-    onExtracted({ ...manualData, category: cat, id: Date.now(), businessPct: 100 });
+    const tag = suggestTag(manualData.merchant);
+    onExtracted({ ...manualData, category: cat, tag, id: Date.now(), businessPct: 100 });
   };
 
   return (
@@ -1369,6 +1467,32 @@ function EditScreen({ receipt, onSave, onCancel }) {
             <select className="pf-select" value={data.category} onChange={e => setData(d => ({ ...d, category: e.target.value }))}>
               {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+            {data.tag && TAG_META[data.tag] && (
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                marginTop: 8, padding: "4px 8px 4px 10px",
+                background: "rgba(27,94,32,0.08)",
+                border: `1px solid rgba(27,94,32,0.18)`,
+                borderRadius: 12, fontSize: 11, color: C.forest, fontWeight: 600,
+              }}>
+                <span>{TAG_META[data.tag].label}</span>
+                <button
+                  onClick={() => setData(d => ({ ...d, tag: null }))}
+                  title="Remove this tag"
+                  aria-label={`Remove ${TAG_META[data.tag].label} tag`}
+                  style={{
+                    background: "transparent", border: "none", padding: 0,
+                    color: C.forest, cursor: "pointer", fontSize: 14, lineHeight: 1,
+                    width: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                >×</button>
+              </div>
+            )}
+            {data.tag && TAG_META[data.tag] && (
+              <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 6, lineHeight: 1.4 }}>
+                {TAG_META[data.tag].hint}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2966,192 +3090,129 @@ export default function PreFileApp() {
       },
     };
 
-    // ── Sheet 1: RECEIPTS ────────────────────────────────────
-    const COLS_RECEIPTS = ["A","B","C","D","E","F","G","H"];
-    const HDR_RECEIPTS  = [
-      "Date", "Merchant", "Category",
-      "What this covers", "Amount ($)", "Business %", "Business Amount ($)", "Notes / Business purpose"
-    ];
-    const NCOLS = HDR_RECEIPTS.length; // 8
-
-    const ws1 = {};
-    const grandTotal = receipts.reduce((s,r) => s + ((parseFloat(r.amount)||0)*((r.businessPct||100)/100)), 0);
-    const preparedDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-
-    // ── Header block rows 1–4 ──────────────────────────────
-    const metaLabelStyle = {
-      font:  { bold: true, color: { rgb: WHITE }, name: "Calibri", sz: 11 },
-      fill:  { fgColor: { rgb: FOREST }, patternType: "solid" },
-      alignment: { horizontal: "left", vertical: "center" },
-    };
-    const metaValueStyle = {
-      font:  { color: { rgb: "FFCCE5CC" }, name: "Calibri", sz: 11 },
-      fill:  { fgColor: { rgb: FOREST }, patternType: "solid" },
-      alignment: { horizontal: "left", vertical: "center" },
-    };
-
-    ws1["!merges"] = [
-      { s:{r:0,c:0}, e:{r:0,c:NCOLS-1} }, // Row 1: app title
-      { s:{r:1,c:1}, e:{r:1,c:NCOLS-1} }, // Row 2: date value
-      { s:{r:2,c:1}, e:{r:2,c:NCOLS-1} }, // Row 3: count value
-      { s:{r:3,c:1}, e:{r:3,c:NCOLS-1} }, // Row 4: total value
-    ];
-
-    // Row 1 — App title banner
-    ws1["A1"] = { v: "PreFile Tax Organizer — Tax Year 2025", t: "s", s: {
-      font:      { bold: true, color: { rgb: WHITE }, name: "Calibri", sz: 13 },
-      fill:      { fgColor: { rgb: FOREST }, patternType: "solid" },
-      alignment: { horizontal: "left", vertical: "center" },
-    }};
-    // Row 2 — Prepared date
-    ws1["A2"] = { v: "Prepared on:", t: "s", s: metaLabelStyle };
-    ws1["B2"] = { v: preparedDate, t: "s", s: metaValueStyle };
-    // Row 3 — Receipt count
-    ws1["A3"] = { v: "Total receipts:", t: "s", s: metaLabelStyle };
-    ws1["B3"] = { v: receipts.length, t: "n", s: metaValueStyle };
-    // Row 4 — Total business amount
-    ws1["A4"] = { v: "Total business amount:", t: "s", s: metaLabelStyle };
-    ws1["B4"] = { v: grandTotal, t: "n", s: { ...metaValueStyle, font: { ...metaValueStyle.font, bold: true, sz: 12 } } };
-    ws1["B4"].z = "$#,##0.00";
-
-    // Fill remaining cells in rows 1-4 with forest green
-    for (let row = 1; row <= 4; row++) {
-      for (let col = 1; col < NCOLS; col++) {
-        const addr = COLS_RECEIPTS[col] + row;
-        if (!ws1[addr]) ws1[addr] = { v: "", t: "s", s: metaLabelStyle };
-      }
-    }
-
-    // ── Column headers row 5 (index 4) ────────────────────
-    HDR_RECEIPTS.forEach((h, ci) => {
-      const addr = COLS_RECEIPTS[ci] + "5";
-      ws1[addr] = { v: h, t: "s", s: headerStyle() };
+    // ──────────────────────────────────────────────────────────────────────
+    // SHARED DATA + STYLES for the 4-sheet CPA-aligned export
+    // ──────────────────────────────────────────────────────────────────────
+    const grandTotal = receipts.reduce(
+      (s, r) => s + ((parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100)),
+      0
+    );
+    const preparedDate = new Date().toLocaleDateString("en-US", {
+      year: "numeric", month: "long", day: "numeric",
     });
 
-    // ── Data rows starting at row 6 (index 5) ─────────────
-    const range1 = { s: { c:0, r:0 }, e: { c: NCOLS-1, r: 4 } };
-
-    receipts.forEach((r, i) => {
-      const rowNum  = i + 6;
-      const pct     = r.businessPct || 100;
-      const amt     = parseFloat(r.amount) || 0;
-      const bizAmt  = amt * pct / 100;
-      const catMeta = CAT_META[r.category] || CAT_META["Other"];
-      const catDef  = CATEGORY_DEFINITIONS[r.category] || "";
-      const bgArgb  = soften(catMeta.color);
-
-      const rowData = [
-        r.date || "",
-        r.merchant,
-        r.category,
-        catDef,
-        amt,
-        pct / 100,
-        bizAmt,
-        "",                    // Notes / business purpose — left blank for user
-      ];
-
-      rowData.forEach((v, ci) => {
-        const addr = COLS_RECEIPTS[ci] + rowNum;
-        const isAmt  = ci === 4 || ci === 6;
-        const isPct  = ci === 5;
-        const isLeft = ci <= 3 || ci === 7;
-        const s = dataStyle(bgArgb, ci === 1, isLeft ? "left" : "right");
-        ws1[addr] = { v, t: typeof v === "number" ? "n" : "s", s };
-        if (isAmt) ws1[addr].z = "$#,##0.00";
-        if (isPct) ws1[addr].z = "0%";
-      });
-
-      if (rowNum > range1.e.r) range1.e.r = rowNum;
-    });
-
-    // ── Total row ──────────────────────────────────────────
-    const totalRow = receipts.length + 6;
-    Array(NCOLS).fill("").forEach((_, ci) => {
-      const addr = COLS_RECEIPTS[ci] + totalRow;
-      ws1[addr] = { v: "", t: "s", s: totalStyle };
-    });
-    ws1["B" + totalRow] = { v: "TOTAL", t: "s", s: { ...totalStyle, alignment: { horizontal: "left", vertical: "center" } }};
-    ws1["G" + totalRow] = { v: grandTotal, t: "n", s: totalStyle };
-    ws1["G" + totalRow].z = "$#,##0.00";
-
-    // ── Disclaimer row ─────────────────────────────────────
-    const discRow = totalRow + 1;
-    ws1["A" + discRow] = {
-      v: "For organization purposes only · Amounts are estimates · Always verify with your tax professional before filing",
-      t: "s",
-      s: {
-        font:      { italic: true, color: { rgb: "FF9A9A97" }, name: "Calibri", sz: 9 },
-        fill:      { fgColor: { rgb: CREAM2 }, patternType: "solid" },
-        alignment: { horizontal: "left", vertical: "center", wrapText: true },
-      },
-    };
-    ws1["!merges"].push({ s:{r:discRow-1,c:0}, e:{r:discRow-1,c:NCOLS-1} });
-
-    range1.e.r = discRow;
-    ws1["!ref"] = XLSX.utils.encode_range(range1);
-    ws1["!cols"] = [
-      { wch: 14 }, // Date
-      { wch: 28 }, // Merchant
-      { wch: 24 }, // Category
-      { wch: 48 }, // Definition
-      { wch: 14 }, // Amount
-      { wch: 12 }, // Business %
-      { wch: 18 }, // Business Amount
-      { wch: 32 }, // Notes
-    ];
-    ws1["!rows"] = [
-      { hpt: 24 }, // Title
-      { hpt: 18 }, // Date
-      { hpt: 18 }, // Count
-      { hpt: 18 }, // Total
-      { hpt: 18 }, // Column headers
-      ...receipts.map(() => ({ hpt: 36 })),
-      { hpt: 18 }, // Total row
-      { hpt: 28 }, // Disclaimer
-    ];
-    // Freeze pane below header block + column headers (row 6)
-    ws1["!freeze"] = { xSplit: 0, ySplit: 5 };
-    // Auto-filter on column header row
-    ws1["!autofilter"] = { ref: `A5:H5` };
-
-    // ── Sheet 2: SUMMARY ─────────────────────────────────────
-    const ws2 = {};
-
-    // Build category totals, sorted by business amount descending
+    // Per-category business totals + receipts grouped by category
     const catTotals = {};
+    const catReceipts = {};
     receipts.forEach(r => {
-      const amt    = parseFloat(r.amount) || 0;
+      const amt = parseFloat(r.amount) || 0;
       const bizAmt = amt * ((r.businessPct || 100) / 100);
-      catTotals[r.category] = (catTotals[r.category] || 0) + bizAmt;
+      catTotals[r.category]   = (catTotals[r.category]   || 0) + bizAmt;
+      catReceipts[r.category] = catReceipts[r.category]  || [];
+      catReceipts[r.category].push(r);
     });
-    const sorted = Object.entries(catTotals).sort((a,b) => b[1] - a[1]);
+    const sortedCats = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
     const grandBiz = grandTotal;
 
-    // Reusable styles for this sheet
-    // Color palette (per CPA-ready brief):
-    //   FF1F5F2E — dark green (titles, totals)
-    //   FFF4FAF6 — very light green (totals fill, table-total fill)
+    // Schedule C line totals — now tag-aware. Each receipt is routed to its
+    // EFFECTIVE Schedule C line: if the receipt has a tag (cogs_inventory,
+    // freight_in, etc.), the tag's mapping wins; otherwise the category's
+    // mapping is used. This means a "Supplies" receipt tagged as
+    // cogs_inventory will appear under Schedule C Line 36, not Line 22.
+    //
+    // Bucketing key in lineTotals reflects the tagged section name when
+    // present (e.g. "Schedule C Part III — Purchases (one of several COGS
+    // inputs)") so a preparer reading the export sees the COGS-related
+    // grouping clearly, not just a Line 36 cell with no context.
+    const effectiveLineFor = (r) => {
+      const meta = r.tag && TAG_META[r.tag];
+      if (meta) return meta.section || meta.schCLine;
+      return SCHEDULE_C_REFERENCE[r.category] || "Varies — review before filing";
+    };
+    // Display label for the "Category" column in the Schedule C sheet. For
+    // tagged receipts, show the tag label (e.g. "Inventory purchase") so the
+    // preparer sees why the receipt was routed differently from its category.
+    const displayCategoryFor = (r) => {
+      const meta = r.tag && TAG_META[r.tag];
+      return meta ? `${meta.label} (was ${r.category})` : r.category;
+    };
+    const lineTotals = {}; // { line/section: { total, items: [{ displayCategory, amount, receipts }] } }
+    receipts.forEach(r => {
+      const amt = parseFloat(r.amount) || 0;
+      const bizAmt = amt * ((r.businessPct || 100) / 100);
+      const line = effectiveLineFor(r);
+      const display = displayCategoryFor(r);
+      if (!lineTotals[line]) lineTotals[line] = { total: 0, items: {} };
+      if (!lineTotals[line].items[display]) {
+        lineTotals[line].items[display] = { amount: 0, receipts: [] };
+      }
+      lineTotals[line].total += bizAmt;
+      lineTotals[line].items[display].amount += bizAmt;
+      lineTotals[line].items[display].receipts.push(r);
+    });
+    // Convert each line's items map into a sorted array (descending by amount)
+    Object.values(lineTotals).forEach(group => {
+      group.categories = Object.entries(group.items)
+        .map(([category, data]) => ({ category, amount: data.amount, receipts: data.receipts }))
+        .sort((a, b) => b.amount - a.amount);
+      delete group.items;
+    });
+    // Sort: Schedule C Part III (COGS) first, then numbered Schedule C lines
+    // in ascending order, then "Varies" buckets last.
+    const sortedLines = Object.entries(lineTotals).sort(([a], [b]) => {
+      const aIsCOGS = a.startsWith("Schedule C Part III");
+      const bIsCOGS = b.startsWith("Schedule C Part III");
+      if (aIsCOGS && !bIsCOGS) return -1;
+      if (bIsCOGS && !aIsCOGS) return 1;
+      const aNum = a.match(/Line (\d+)/);
+      const bNum = b.match(/Line (\d+)/);
+      if (aNum && bNum) return parseInt(aNum[1]) - parseInt(bNum[1]);
+      if (aNum) return -1;
+      if (bNum) return 1;
+      return a.localeCompare(b);
+    });
+
+    // Insights for Review & Flags sheet (re-uses existing computeInsights output)
+    const insightsForReview = computeInsights(receipts).all || [];
+
+    // ── Shared style palette (matches the design language established in
+    //    the previous Summary-sheet pass) ──
+    //   FF1F5F2E — dark green (titles, totals, table-header text)
+    //   FFF4FAF6 — very light green (totals fill)
     //   FFEEF6F0 — light green tint (table header fill)
     //   FFD6E8DC — soft green border
     //   FFFFFAF0 — soft warm fill (insight rows)
-    //   FFE6B800 — warm gold (insight left border)
+    //   FFE6B800 — warm gold (insight left border accent)
     //   FF4A4A4A — neutral gray (description / disclaimer text)
     //   FF6B6B6B — section-label gray
     //   FFFAFAFA — zebra row fill
     //   FFF0F0F0 — thin row divider
-    const summaryHeaderStyle = {
+    const titleStyle = {
       font:      { bold: true, color: { rgb: "FF1F5F2E" }, name: "Calibri", sz: 18 },
       alignment: { horizontal: "left", vertical: "center" },
       fill:      { patternType: "solid", fgColor: { rgb: "FFF4FAF6" } },
     };
-    const summarySubheaderStyle = {
+    const subheaderStyle = {
       font:      { color: { rgb: "FF4A4A4A" }, name: "Calibri", sz: 11 },
       alignment: { horizontal: "left", vertical: "center" },
     };
-    const summaryBylineStyle = {
+    const bylineStyle = {
       font:      { italic: true, color: { rgb: "FF4A4A4A" }, name: "Calibri", sz: 10 },
       alignment: { horizontal: "left", vertical: "center" },
+    };
+    const sectionLabelStyle = {
+      font:      { bold: true, color: { rgb: "FF6B6B6B" }, name: "Calibri", sz: 12 },
+      alignment: { horizontal: "left", vertical: "center" },
+    };
+    const tableHeaderStyle = {
+      font:      { bold: true, color: { rgb: "FF1F5F2E" }, name: "Calibri", sz: 11 },
+      alignment: { horizontal: "left", vertical: "center", wrapText: true },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFEEF6F0" } },
+      border:    { bottom: { style: "thin", color: { rgb: "FFD6E8DC" } } },
+    };
+    const tableHeaderRightStyle = {
+      ...tableHeaderStyle,
+      alignment: { horizontal: "right", vertical: "center", wrapText: true },
     };
     const totalLabelStyle = {
       font:      { bold: true, color: { rgb: "FF1F5F2E" }, name: "Calibri", sz: 14 },
@@ -3173,203 +3234,453 @@ export default function PreFileApp() {
         right:  { style: "thin", color: { rgb: "FFD6E8DC" } },
       },
     };
-    // Section labels (e.g., "Category Breakdown", "Top Categories")
-    const sectionLabelStyle = {
-      font:      { bold: true, color: { rgb: "FF6B6B6B" }, name: "Calibri", sz: 12 },
-      alignment: { horizontal: "left", vertical: "center" },
-    };
-    const tableHeaderStyle = {
+    const lineSubtotalLabelStyle = {
       font:      { bold: true, color: { rgb: "FF1F5F2E" }, name: "Calibri", sz: 11 },
       alignment: { horizontal: "left", vertical: "center" },
-      fill:      { patternType: "solid", fgColor: { rgb: "FFEEF6F0" } },
-      border:    { bottom: { style: "thin", color: { rgb: "FFD6E8DC" } } },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFF4FAF6" } },
+      border:    { top: { style: "thin", color: { rgb: "FFD6E8DC" } } },
     };
-    const tableHeaderFillStyle = tableHeaderStyle; // alias retained for downstream uses
-    // Insight row styling — gold for "review" (default) vs soft red for "risk" items
-    // (duplicates, overstatements). Fills stay near-white so the sheet never feels
-    // saturated; the medium left border carries the visual grouping.
-    const RISK_INSIGHT_IDS = new Set(["duplicate_entries", "mixed_use_100pct", "rounded_numbers"]);
-    const insightReviewStyle = {
-      font:      { color: { rgb: INK }, name: "Calibri", sz: 13 },
-      alignment: { horizontal: "left", vertical: "center", wrapText: true },
-      fill:      { patternType: "solid", fgColor: { rgb: "FFFFFAF0" } },  // soft warm tone
-      border:    { left: { style: "medium", color: { rgb: "FFE6B800" } } }, // warm gold, thicker
+    const lineSubtotalAmountStyle = {
+      ...lineSubtotalLabelStyle,
+      alignment: { horizontal: "right", vertical: "center" },
     };
-    const insightRiskStyle = {
-      font:      { color: { rgb: INK }, name: "Calibri", sz: 13 },
-      alignment: { horizontal: "left", vertical: "center", wrapText: true },
-      fill:      { patternType: "solid", fgColor: { rgb: "FFFFEBEE" } },  // very light red
-      border:    { left: { style: "medium", color: { rgb: "FFC62828" } } }, // soft red, thicker
-    };
-    const insightNeutralStyle = {
-      font:      { color: { rgb: INK }, name: "Calibri", sz: 13 },
-      alignment: { horizontal: "left", vertical: "center", wrapText: true },
-      fill:      { patternType: "solid", fgColor: { rgb: "FFFFFAF0" } },  // soft warm tone (matches review)
-      border:    { left: { style: "medium", color: { rgb: "FFE6B800" } } }, // warm gold, thicker
-    };
-    // Top-category-row highlight — the first (largest) row in Category Breakdown
-    const topCategoryRowStyle = {
-      font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 11 },
-      fill:      { patternType: "solid", fgColor: { rgb: "FFFFF8E1" } },  // very light amber
-      border:    { bottom: { style: "thin", color: { rgb: "FFF0F0F0" } } },
-    };
-    // Even / odd zebra striping for the rest of the Category Breakdown rows
-    const tableRowEvenStyle = {
+    const dataRowEvenStyle = {
       font:      { color: { rgb: INK }, name: "Calibri", sz: 11 },
       alignment: { horizontal: "left", vertical: "center" },
       fill:      { patternType: "solid", fgColor: { rgb: "FFFFFFFF" } },
       border:    { bottom: { style: "thin", color: { rgb: "FFF0F0F0" } } },
     };
-    const tableRowOddStyle = {
-      ...tableRowEvenStyle,
+    const dataRowOddStyle = {
+      ...dataRowEvenStyle,
       fill:      { patternType: "solid", fgColor: { rgb: "FFFAFAFA" } },
     };
-    const tableAmountEvenStyle = {
-      ...tableRowEvenStyle,
-      alignment: { horizontal: "right", vertical: "center" },
-    };
-    const tableAmountOddStyle = {
-      ...tableRowOddStyle,
-      alignment: { horizontal: "right", vertical: "center" },
-    };
-
-    // Row 1: Sheet header (styled)
-    ws2["A1"] = { v: "Here are your full analysis results — including additional insights to review.", t: "s", s: summaryHeaderStyle };
-
-    // Row 2: Subheader (italic, smaller, muted ink — sits directly under header)
-    ws2["A2"] = { v: "Review each section carefully before filing.", t: "s", s: summarySubheaderStyle };
-
-    // Row 3: Byline tagline (small italic, muted gray — uses the existing gap slot)
-    ws2["A3"] = { v: "Prepared with PreFile — organized for review before filing.", t: "s", s: summaryBylineStyle };
-
-    // Row 4: blank (gap between header block and totals)
-
-    // Row 5: Total Business Expenses (label + amount, both bold, B as currency)
-    ws2["A5"] = { v: "Total Business Expenses", t: "s", s: totalLabelStyle };
-    ws2["B5"] = { v: grandBiz, t: "n", s: totalAmountStyle, z: "$#,##0.00" };
-
-    // Row 6: blank (gap between totals and insight block)
-
-    // Rows 7..N (only when there's data): Insights — one per row, full list.
-    // Uses the shared computeInsights() helper so the paywall teaser count and
-    // the exported file are guaranteed to be in sync. The XLSX uses the full
-    // .all list (deduped + sorted by priority desc); the paywall pitch uses
-    // .tier1 length only.
-    // The "highest spend" top-line summary follows as the last insight row.
-    // When sorted is empty, no insights are written and downstream rows do NOT shift.
-    const insights = sorted.length > 0 ? computeInsights(receipts).all : [];
-    const insightCount  = insights.length;
-    const topLineShift  = sorted.length > 0 ? 1 : 0;
-    const shift = insightCount + topLineShift;
-
-    insights.forEach((ins, i) => {
-      const isRisk = RISK_INSIGHT_IDS.has(ins.id);
-      ws2["A" + (7 + i)] = { v: ins.line, t: "s", s: isRisk ? insightRiskStyle : insightReviewStyle };
-    });
-    if (sorted.length > 0) {
-      const topPct = grandBiz > 0 ? ((sorted[0][1] / grandBiz) * 100).toFixed(0) : 0;
-      ws2["A" + (7 + insightCount)] = { v: `Your highest business spend is ${sorted[0][0]} (${topPct}% of total)`, t: "s", s: insightNeutralStyle };
-    }
-
-    // Blank row between insight block and Category Breakdown — then section title
-    ws2["A" + (8 + shift)] = { v: "Category Breakdown", t: "s", s: sectionLabelStyle };
-
-    // Table headers
-    const headerRow = 9 + shift;
-    ws2["A" + headerRow] = { v: "Category",    t: "s", s: tableHeaderFillStyle };
-    ws2["B" + headerRow] = { v: "Total",       t: "s", s: { ...tableHeaderFillStyle, alignment: { horizontal: "right", vertical: "center" } } };
-    ws2["C" + headerRow] = { v: "% of Spend",  t: "s", s: { ...tableHeaderFillStyle, alignment: { horizontal: "right", vertical: "center" } } };
-    ws2["D" + headerRow] = { v: "Common mapping (verify before filing)", t: "s", s: tableHeaderFillStyle };
-
-    // Category data (sorted by total DESC, top row gets subtle highlight).
-    // Non-top rows alternate fill (zebra striping) for readability; numeric
-    // columns are right-aligned. Column D shows the common Schedule C line
-    // for the category — see SCHEDULE_C_REFERENCE for the mapping. Marked
-    // clearly as guidance only via the column header and the disclaimer
-    // row below.
-    sorted.forEach(([cat, bizAmt], i) => {
-      const rowNum = i + 10 + shift;
-      const pctOfTotal = grandBiz > 0 ? bizAmt / grandBiz : 0;
-      const isTop = i === 0;
-      const reference = SCHEDULE_C_REFERENCE[cat] || "Varies — depends on use, review before filing";
-      // Style selection: top row keeps amber highlight; remaining rows alternate
-      // white / off-white. Amount columns get right-aligned variants.
-      const labelStyle  = isTop ? topCategoryRowStyle : (i % 2 === 1 ? tableRowOddStyle : tableRowEvenStyle);
-      const amountStyle = isTop
-        ? { ...topCategoryRowStyle, alignment: { horizontal: "right" } }
-        : (i % 2 === 1 ? tableAmountOddStyle : tableAmountEvenStyle);
-      ws2["A" + rowNum] = { v: cat,        t: "s", s: labelStyle };
-      ws2["B" + rowNum] = { v: bizAmt,     t: "n", z: "$#,##0.00", s: amountStyle };
-      ws2["C" + rowNum] = { v: pctOfTotal, t: "n", z: "0.0%",      s: amountStyle };
-      ws2["D" + rowNum] = { v: reference,  t: "s", s: labelStyle };
-    });
-
-    // Disclaimer + Top Categories section
-    // Layout: data → blank → disclaimer → blank → Top Categories title → top 3
-    const lastDataRow      = 9 + shift + sorted.length;   // row of last category (or headerRow if empty)
-    const disclaimerRow    = lastDataRow + 2;             // blank row, then disclaimer
-    const topTitleRow      = disclaimerRow + 2;           // blank row after disclaimer, then title
-    ws2["A" + disclaimerRow] = {
-      v: "References are provided for general guidance only. Confirm all classifications with a qualified tax professional before filing.",
-      t: "s",
-      s: { font: { italic: true, color: { rgb: "FF8B8B8B" }, name: "Calibri", sz: 10 }, alignment: { horizontal: "left", vertical: "center", wrapText: true } },
-    };
-    ws2["A" + topTitleRow] = { v: "Top Categories", t: "s", s: sectionLabelStyle };
-
-    const topThree = sorted.slice(0, 3);
-    const topThreeRowStyle = {
+    const dataAmountEvenStyle = { ...dataRowEvenStyle, alignment: { horizontal: "right", vertical: "center" } };
+    const dataAmountOddStyle  = { ...dataRowOddStyle,  alignment: { horizontal: "right", vertical: "center" } };
+    const flagIssueStyle = {
       font:      { bold: true, color: { rgb: INK }, name: "Calibri", sz: 11 },
-      alignment: { horizontal: "left", vertical: "center" },
+      alignment: { horizontal: "left", vertical: "top", wrapText: true },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFFFFAF0" } },
+      border:    { left: { style: "medium", color: { rgb: "FFE6B800" } } },
     };
-    topThree.forEach(([cat, bizAmt], i) => {
-      const rowNum = topTitleRow + 1 + i;
-      ws2["A" + rowNum] = { v: `#${i + 1} ${cat} — $${bizAmt.toFixed(2)} (${grandBiz > 0 ? ((bizAmt / grandBiz) * 100).toFixed(0) : 0}% of spend)`, t: "s", s: topThreeRowStyle };
+    const flagBodyStyle = {
+      font:      { color: { rgb: INK }, name: "Calibri", sz: 11 },
+      alignment: { horizontal: "left", vertical: "top", wrapText: true },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFFFFAF0" } },
+    };
+    const disclaimerStyle = {
+      font:      { italic: true, color: { rgb: "FF9A9A97" }, name: "Calibri", sz: 9 },
+      alignment: { horizontal: "left", vertical: "center", wrapText: true },
+    };
+
+    // ──────────────────────────────────────────────────────────────────────
+    // SHEET 1 — MASTER SUMMARY
+    // Title, prepared date, top totals, navigation to other sheets, top 3
+    // categories. No fabricated business name (PreFile does not collect it).
+    // ──────────────────────────────────────────────────────────────────────
+    const wsMaster = {};
+    wsMaster["A1"] = { v: "PreFile Organizer — Master Summary", t: "s", s: titleStyle };
+    wsMaster["A2"] = { v: "Tax Year 2025  ·  Prepared " + preparedDate, t: "s", s: subheaderStyle };
+    wsMaster["A3"] = { v: "Organizational summary based on receipts entered. Confirm all amounts with your tax preparer.", t: "s", s: bylineStyle };
+
+    // Key totals (rows 5–7)
+    wsMaster["A5"] = { v: "Total Business Expenses", t: "s", s: totalLabelStyle };
+    wsMaster["B5"] = { v: grandTotal, t: "n", z: "$#,##0.00", s: totalAmountStyle };
+    wsMaster["A6"] = { v: "Total Receipts Logged", t: "s", s: { ...totalLabelStyle, font: { ...totalLabelStyle.font, sz: 11 } } };
+    wsMaster["B6"] = { v: receipts.length, t: "n", s: { ...totalAmountStyle, font: { ...totalAmountStyle.font, sz: 11 } } };
+    wsMaster["A7"] = { v: "Distinct Categories", t: "s", s: { ...totalLabelStyle, font: { ...totalLabelStyle.font, sz: 11 } } };
+    wsMaster["B7"] = { v: sortedCats.length, t: "n", s: { ...totalAmountStyle, font: { ...totalAmountStyle.font, sz: 11 } } };
+
+    // Top 3 categories preview (rows 9–13)
+    wsMaster["A9"] = { v: "Top Categories", t: "s", s: sectionLabelStyle };
+    wsMaster["A10"] = { v: "Category", t: "s", s: tableHeaderStyle };
+    wsMaster["B10"] = { v: "Total", t: "s", s: tableHeaderRightStyle };
+    wsMaster["C10"] = { v: "% of Spend", t: "s", s: tableHeaderRightStyle };
+    sortedCats.slice(0, 3).forEach(([cat, total], i) => {
+      const rowNum = 11 + i;
+      const isOdd = i % 2 === 1;
+      wsMaster["A" + rowNum] = { v: cat, t: "s", s: isOdd ? dataRowOddStyle : dataRowEvenStyle };
+      wsMaster["B" + rowNum] = { v: total, t: "n", z: "$#,##0.00", s: isOdd ? dataAmountOddStyle : dataAmountEvenStyle };
+      wsMaster["C" + rowNum] = { v: grandBiz > 0 ? total / grandBiz : 0, t: "n", z: "0.0%", s: isOdd ? dataAmountOddStyle : dataAmountEvenStyle };
     });
 
-    // Sheet metadata: range, columns, freeze, and per-row heights for breathing room
-    const lastRow = topTitleRow + topThree.length;    // last row containing content
-    ws2["!ref"]  = XLSX.utils.encode_range({ s:{c:0,r:0}, e:{c:3,r:lastRow} });
-    ws2["!cols"] = [{ wch: 34 }, { wch: 16 }, { wch: 14 }, { wch: 38 }];
-    ws2["!freeze"] = { ySplit: 1 };
-    // Row heights: taller title block, taller totals row, taller insight rows
-    // (so wrapped text breathes), and a slightly taller table header.
-    const rowHeights = [];
-    rowHeights[0]  = { hpt: 28 };  // Row 1 — sheet title
-    rowHeights[1]  = { hpt: 18 };  // Row 2 — subheader
-    rowHeights[2]  = { hpt: 16 };  // Row 3 — byline
-    rowHeights[4]  = { hpt: 24 };  // Row 5 — Total Business Expenses
-    insights.forEach((ins, i) => {
-      // ~36pt base + ~12pt per ~80 chars beyond the first line
-      const len = (ins.line || "").length;
-      const extraLines = Math.max(0, Math.ceil(len / 80) - 1);
-      rowHeights[6 + i] = { hpt: 36 + extraLines * 12 };
+    // Navigator (rows 15+)
+    const navStartRow = 11 + Math.min(3, sortedCats.length) + 1; // blank row, then label
+    wsMaster["A" + navStartRow] = { v: "What's in this Workbook", t: "s", s: sectionLabelStyle };
+    const navHeaderRow = navStartRow + 1;
+    wsMaster["A" + navHeaderRow] = { v: "Sheet", t: "s", s: tableHeaderStyle };
+    wsMaster["B" + navHeaderRow] = { v: "What it shows",     t: "s", s: tableHeaderStyle };
+    const navRows = [
+      ["Master Summary",            "Top totals, top categories, sheet navigator (this sheet)"],
+      ["Schedule C Expenses",       "Receipt totals grouped by Schedule C line — preparer-ready view"],
+      ["Business Expenses by Category", "Every receipt, grouped by category, tagged with its Schedule C line"],
+      ["Review & Flags",            "Issues to confirm before filing, generated from the receipt data"],
+    ];
+    navRows.forEach(([sheet, desc], i) => {
+      const rowNum = navHeaderRow + 1 + i;
+      const isOdd = i % 2 === 1;
+      wsMaster["A" + rowNum] = { v: sheet, t: "s", s: isOdd ? dataRowOddStyle : dataRowEvenStyle };
+      wsMaster["B" + rowNum] = { v: desc,  t: "s", s: isOdd ? dataRowOddStyle : dataRowEvenStyle };
     });
-    if (sorted.length > 0) {
-      rowHeights[6 + insightCount] = { hpt: 28 };  // top-line "highest spend" insight row
+
+    // Disclaimer footer
+    const masterDiscRow = navHeaderRow + 1 + navRows.length + 1;
+    wsMaster["A" + masterDiscRow] = {
+      v: "For organization purposes only · Amounts are estimates · Always verify with your tax professional before filing",
+      t: "s",
+      s: disclaimerStyle,
+    };
+    wsMaster["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }, // title
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } }, // subheader
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 2 } }, // byline
+      { s: { r: navStartRow - 1, c: 0 }, e: { r: navStartRow - 1, c: 2 } },
+      { s: { r: navHeaderRow - 1, c: 1 }, e: { r: navHeaderRow - 1, c: 2 } }, // "What it shows" spans B+C
+      ...navRows.map((_, i) => ({
+        s: { r: navHeaderRow + i, c: 1 },
+        e: { r: navHeaderRow + i, c: 2 },
+      })),
+      { s: { r: masterDiscRow - 1, c: 0 }, e: { r: masterDiscRow - 1, c: 2 } }, // disclaimer
+    ];
+    wsMaster["!ref"]  = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 2, r: masterDiscRow - 1 } });
+    wsMaster["!cols"] = [{ wch: 38 }, { wch: 18 }, { wch: 16 }];
+    const masterRowHeights = [];
+    masterRowHeights[0] = { hpt: 28 };
+    masterRowHeights[1] = { hpt: 18 };
+    masterRowHeights[2] = { hpt: 16 };
+    masterRowHeights[4] = { hpt: 24 };
+    masterRowHeights[masterDiscRow - 1] = { hpt: 28 };
+    wsMaster["!rows"] = masterRowHeights;
+    wsMaster["!freeze"] = { ySplit: 1 };
+
+    // ──────────────────────────────────────────────────────────────────────
+    // SHEET 2 — SCHEDULE C EXPENSES
+    // Receipt totals grouped by IRS Schedule C line. This is the single
+    // most preparer-useful view in the workbook — it answers "what goes
+    // on each line of the form" directly.
+    // ──────────────────────────────────────────────────────────────────────
+    const wsSchC = {};
+    wsSchC["A1"] = { v: "Schedule C Expenses", t: "s", s: titleStyle };
+    wsSchC["A2"] = { v: "Tax Year 2025  ·  Receipt totals grouped by Schedule C line", t: "s", s: subheaderStyle };
+    wsSchC["A3"] = { v: "Line assignments are guidance based on category. Confirm each placement with your tax professional.", t: "s", s: bylineStyle };
+
+    // Table headers at row 5
+    const SCH_HDR_ROW = 5;
+    wsSchC["A" + SCH_HDR_ROW] = { v: "Schedule C Line",             t: "s", s: tableHeaderStyle };
+    wsSchC["B" + SCH_HDR_ROW] = { v: "Category",                    t: "s", s: tableHeaderStyle };
+    wsSchC["C" + SCH_HDR_ROW] = { v: "Amount",                      t: "s", s: tableHeaderRightStyle };
+    wsSchC["D" + SCH_HDR_ROW] = { v: "Source",                      t: "s", s: tableHeaderStyle };
+    wsSchC["E" + SCH_HDR_ROW] = { v: "Notes",                       t: "s", s: tableHeaderStyle };
+
+    // Build the data block: for each line, list the contributing categories
+    // with subtotals. Each line gets a subtotal row at the bottom.
+    let schRow = SCH_HDR_ROW + 1;
+    let schZebra = 0;
+    sortedLines.forEach(([line, group]) => {
+      group.categories.forEach(({ category, amount, receipts: itemReceipts }) => {
+        const isOdd = schZebra % 2 === 1;
+        const merchantList = (itemReceipts || [])
+          .map(r => r.merchant)
+          .filter(Boolean);
+        // Source = compact list of merchants for this bucket (truncated)
+        const uniqueMerchants = [...new Set(merchantList)];
+        const sourceText = uniqueMerchants.length === 0
+          ? ""
+          : uniqueMerchants.length <= 3
+            ? uniqueMerchants.join(", ")
+            : `${uniqueMerchants.slice(0, 3).join(", ")} + ${uniqueMerchants.length - 3} more`;
+        // Notes: for tagged buckets, use the tag's hint; otherwise use the
+        // category definition. This makes the routing decision visible.
+        const taggedReceipt = (itemReceipts || []).find(r => r.tag);
+        const noteText = taggedReceipt
+          ? (TAG_META[taggedReceipt.tag]?.hint || "")
+          : (CATEGORY_DEFINITIONS[(itemReceipts && itemReceipts[0]?.category) || ""] || "");
+        wsSchC["A" + schRow] = { v: line,       t: "s", s: isOdd ? dataRowOddStyle : dataRowEvenStyle };
+        wsSchC["B" + schRow] = { v: category,   t: "s", s: isOdd ? dataRowOddStyle : dataRowEvenStyle };
+        wsSchC["C" + schRow] = { v: amount,     t: "n", z: "$#,##0.00", s: isOdd ? dataAmountOddStyle : dataAmountEvenStyle };
+        wsSchC["D" + schRow] = { v: sourceText, t: "s", s: isOdd ? dataRowOddStyle : dataRowEvenStyle };
+        wsSchC["E" + schRow] = { v: noteText,   t: "s", s: isOdd ? dataRowOddStyle : dataRowEvenStyle };
+        schRow++;
+        schZebra++;
+      });
+      // Line subtotal row
+      wsSchC["A" + schRow] = { v: line + " — subtotal", t: "s", s: lineSubtotalLabelStyle };
+      wsSchC["B" + schRow] = { v: "", t: "s", s: lineSubtotalLabelStyle };
+      wsSchC["C" + schRow] = { v: group.total, t: "n", z: "$#,##0.00", s: lineSubtotalAmountStyle };
+      wsSchC["D" + schRow] = { v: "", t: "s", s: lineSubtotalLabelStyle };
+      wsSchC["E" + schRow] = { v: "", t: "s", s: lineSubtotalLabelStyle };
+      schRow++;
+      schZebra = 0; // reset zebra after each subtotal
+    });
+
+    // Grand total row
+    const schTotalRow = schRow + 1;
+    wsSchC["A" + schTotalRow] = { v: "TOTAL BUSINESS EXPENSES", t: "s", s: totalLabelStyle };
+    wsSchC["B" + schTotalRow] = { v: "", t: "s", s: totalLabelStyle };
+    wsSchC["C" + schTotalRow] = { v: grandTotal, t: "n", z: "$#,##0.00", s: totalAmountStyle };
+    wsSchC["D" + schTotalRow] = { v: "", t: "s", s: totalLabelStyle };
+    wsSchC["E" + schTotalRow] = { v: "", t: "s", s: totalLabelStyle };
+
+    // Disclaimer
+    const schDiscRow = schTotalRow + 2;
+    wsSchC["A" + schDiscRow] = {
+      v: "For organization purposes only · Always verify Schedule C placements with your tax professional before filing",
+      t: "s",
+      s: disclaimerStyle,
+    };
+    wsSchC["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 4 } },
+      { s: { r: schDiscRow - 1, c: 0 }, e: { r: schDiscRow - 1, c: 4 } },
+    ];
+    wsSchC["!ref"]  = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 4, r: schDiscRow - 1 } });
+    wsSchC["!cols"] = [{ wch: 26 }, { wch: 26 }, { wch: 16 }, { wch: 32 }, { wch: 50 }];
+    wsSchC["!freeze"] = { ySplit: SCH_HDR_ROW };
+    wsSchC["!autofilter"] = { ref: `A${SCH_HDR_ROW}:E${SCH_HDR_ROW}` };
+    const schRowHeights = [];
+    schRowHeights[0] = { hpt: 28 };
+    schRowHeights[1] = { hpt: 18 };
+    schRowHeights[2] = { hpt: 16 };
+    schRowHeights[SCH_HDR_ROW - 1] = { hpt: 26 };
+    schRowHeights[schTotalRow - 1] = { hpt: 26 };
+    schRowHeights[schDiscRow - 1] = { hpt: 28 };
+    wsSchC["!rows"] = schRowHeights;
+
+    // ──────────────────────────────────────────────────────────────────────
+    // SHEET 3 — BUSINESS EXPENSES BY CATEGORY
+    // Receipt-level detail, grouped by category, each row tagged with its
+    // mapped Schedule C line. This is the "show me every receipt and where
+    // it goes" view.
+    // ──────────────────────────────────────────────────────────────────────
+    const wsBiz = {};
+    wsBiz["A1"] = { v: "Business Expenses — by Category", t: "s", s: titleStyle };
+    wsBiz["A2"] = { v: "Tax Year 2025  ·  Receipt-level detail with Schedule C line tags", t: "s", s: subheaderStyle };
+    wsBiz["A3"] = { v: "Each row carries the Schedule C line its category typically maps to. Verify before filing.", t: "s", s: bylineStyle };
+
+    const BIZ_HDR_ROW = 5;
+    wsBiz["A" + BIZ_HDR_ROW] = { v: "Date",            t: "s", s: tableHeaderStyle };
+    wsBiz["B" + BIZ_HDR_ROW] = { v: "Merchant",        t: "s", s: tableHeaderStyle };
+    wsBiz["C" + BIZ_HDR_ROW] = { v: "Amount",          t: "s", s: tableHeaderRightStyle };
+    wsBiz["D" + BIZ_HDR_ROW] = { v: "Business %",      t: "s", s: tableHeaderRightStyle };
+    wsBiz["E" + BIZ_HDR_ROW] = { v: "Business Amount", t: "s", s: tableHeaderRightStyle };
+    wsBiz["F" + BIZ_HDR_ROW] = { v: "Schedule C Line", t: "s", s: tableHeaderStyle };
+    wsBiz["G" + BIZ_HDR_ROW] = { v: "Notes",           t: "s", s: tableHeaderStyle };
+
+    let bizRow = BIZ_HDR_ROW + 1;
+    sortedCats.forEach(([cat, catTotal]) => {
+      const ref = SCHEDULE_C_REFERENCE[cat] || "Varies — review before filing";
+      // Category subheader row
+      wsBiz["A" + bizRow] = { v: cat + "  (default: " + ref + ")", t: "s", s: lineSubtotalLabelStyle };
+      ["B","C","D","E","F","G"].forEach(c => {
+        wsBiz[c + bizRow] = { v: "", t: "s", s: lineSubtotalLabelStyle };
+      });
+      bizRow++;
+      // Receipts within this category
+      let zebra = 0;
+      (catReceipts[cat] || []).forEach(r => {
+        const isOdd = zebra % 2 === 1;
+        const amt = parseFloat(r.amount) || 0;
+        const pct = (r.businessPct || 100) / 100;
+        const bizAmt = amt * pct;
+        // Tag-aware Schedule C placement: tag wins over category default.
+        const tagMeta = r.tag && TAG_META[r.tag];
+        const effectiveLine = tagMeta ? tagMeta.schCLine : ref;
+        const noteSuffix = tagMeta ? `  [tagged: ${tagMeta.label.toLowerCase()}]` : "";
+        const noteValue = (r.notes || "") + noteSuffix;
+        wsBiz["A" + bizRow] = { v: r.date || "",   t: "s", s: isOdd ? dataRowOddStyle : dataRowEvenStyle };
+        wsBiz["B" + bizRow] = { v: r.merchant || "", t: "s", s: isOdd ? dataRowOddStyle : dataRowEvenStyle };
+        wsBiz["C" + bizRow] = { v: amt,    t: "n", z: "$#,##0.00", s: isOdd ? dataAmountOddStyle : dataAmountEvenStyle };
+        wsBiz["D" + bizRow] = { v: pct,    t: "n", z: "0%",        s: isOdd ? dataAmountOddStyle : dataAmountEvenStyle };
+        wsBiz["E" + bizRow] = { v: bizAmt, t: "n", z: "$#,##0.00", s: isOdd ? dataAmountOddStyle : dataAmountEvenStyle };
+        wsBiz["F" + bizRow] = { v: effectiveLine, t: "s", s: isOdd ? dataRowOddStyle : dataRowEvenStyle };
+        wsBiz["G" + bizRow] = { v: noteValue, t: "s", s: isOdd ? dataRowOddStyle : dataRowEvenStyle };
+        bizRow++;
+        zebra++;
+      });
+      // Category subtotal
+      wsBiz["A" + bizRow] = { v: cat + " — subtotal", t: "s", s: lineSubtotalLabelStyle };
+      ["B","C","D","F","G"].forEach(c => {
+        wsBiz[c + bizRow] = { v: "", t: "s", s: lineSubtotalLabelStyle };
+      });
+      wsBiz["E" + bizRow] = { v: catTotal, t: "n", z: "$#,##0.00", s: lineSubtotalAmountStyle };
+      bizRow++;
+    });
+
+    // Grand total
+    const bizTotalRow = bizRow + 1;
+    wsBiz["A" + bizTotalRow] = { v: "TOTAL BUSINESS EXPENSES", t: "s", s: totalLabelStyle };
+    ["B","C","D","F","G"].forEach(c => {
+      wsBiz[c + bizTotalRow] = { v: "", t: "s", s: totalLabelStyle };
+    });
+    wsBiz["E" + bizTotalRow] = { v: grandTotal, t: "n", z: "$#,##0.00", s: totalAmountStyle };
+
+    const bizDiscRow = bizTotalRow + 2;
+    wsBiz["A" + bizDiscRow] = {
+      v: "For organization purposes only · Schedule C line assignments are guidance — confirm with your tax professional",
+      t: "s",
+      s: disclaimerStyle,
+    };
+    wsBiz["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 6 } },
+      { s: { r: bizDiscRow - 1, c: 0 }, e: { r: bizDiscRow - 1, c: 6 } },
+    ];
+    wsBiz["!ref"]  = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 6, r: bizDiscRow - 1 } });
+    wsBiz["!cols"] = [
+      { wch: 14 }, // Date
+      { wch: 28 }, // Merchant
+      { wch: 14 }, // Amount
+      { wch: 11 }, // Business %
+      { wch: 16 }, // Business Amount
+      { wch: 26 }, // Schedule C Line
+      { wch: 32 }, // Notes
+    ];
+    wsBiz["!freeze"] = { ySplit: BIZ_HDR_ROW };
+    wsBiz["!autofilter"] = { ref: `A${BIZ_HDR_ROW}:G${BIZ_HDR_ROW}` };
+    const bizRowHeights = [];
+    bizRowHeights[0] = { hpt: 28 };
+    bizRowHeights[1] = { hpt: 18 };
+    bizRowHeights[2] = { hpt: 16 };
+    bizRowHeights[BIZ_HDR_ROW - 1] = { hpt: 22 };
+    bizRowHeights[bizTotalRow - 1] = { hpt: 26 };
+    bizRowHeights[bizDiscRow - 1] = { hpt: 28 };
+    wsBiz["!rows"] = bizRowHeights;
+
+    // ──────────────────────────────────────────────────────────────────────
+    // SHEET 4 — REVIEW & FLAGS
+    // Issues / actions surfaced from computeInsights() output, presented
+    // as a structured table (Issue / Explanation / Action) instead of the
+    // prose paragraphs the previous Summary sheet used. Easier to scan,
+    // easier for a preparer to triage.
+    // ──────────────────────────────────────────────────────────────────────
+    const wsReview = {};
+    wsReview["A1"] = { v: "Review & Flags", t: "s", s: titleStyle };
+    wsReview["A2"] = { v: "Tax Year 2025  ·  Items worth confirming before filing", t: "s", s: subheaderStyle };
+    wsReview["A3"] = { v: "Auto-generated from receipt data. None of these are errors — they are checks to confirm.", t: "s", s: bylineStyle };
+
+    const REV_HDR_ROW = 5;
+    wsReview["A" + REV_HDR_ROW] = { v: "Issue",       t: "s", s: tableHeaderStyle };
+    wsReview["B" + REV_HDR_ROW] = { v: "Explanation", t: "s", s: tableHeaderStyle };
+    wsReview["C" + REV_HDR_ROW] = { v: "Action",      t: "s", s: tableHeaderStyle };
+
+    // Issue title for each insight id (short headline). Action is derived
+    // from the last sentence of the insight line where possible, or a
+    // generic "Confirm before filing" fallback.
+    const ISSUE_TITLES = {
+      mileage_gap:              "Possible missing mileage deduction",
+      home_office_with_signal:  "Home office may be deductible",
+      health_insurance_missing: "Self-employed health insurance not seen",
+      meals_high_dollar:        "High-dollar meals to verify",
+      meals_high_ratio:         "Meals are a large share of spend",
+      meals_50pct:              "Confirm meals deducted at 50%",
+      mixed_use_100pct:         "Mixed-use category at 100% — confirm",
+      duplicate_entries:        "Possible duplicate entries",
+      rounded_numbers:          "Rounded amounts — confirm precision",
+      subscription_velocity:    "Recurring subscriptions to verify",
+      home_office_missing:      "Home office not yet captured",
+      category_dominance:       "One category dominates total spend",
+      small_accumulation:       "Many small entries to spot-check",
+      date_gaps:                "Date gaps in receipt timeline",
+    };
+    const extractAction = (line) => {
+      if (!line) return "Confirm before filing.";
+      // Take the last sentence as the action
+      const sentences = line.split(/(?<=[.!?])\s+/).filter(Boolean);
+      return sentences[sentences.length - 1] || "Confirm before filing.";
+    };
+
+    let revRow = REV_HDR_ROW + 1;
+    if (insightsForReview.length === 0) {
+      // No flags case — still render an empty-state row so the sheet isn't blank
+      wsReview["A" + revRow] = { v: "No flags raised", t: "s", s: flagIssueStyle };
+      wsReview["B" + revRow] = { v: "No issues were detected in the receipts you logged. This does not mean the return is complete — confirm all categories and totals with your tax professional.", t: "s", s: flagBodyStyle };
+      wsReview["C" + revRow] = { v: "Proceed to your tax preparer with this workbook.", t: "s", s: flagBodyStyle };
+      revRow++;
+    } else {
+      insightsForReview.forEach((ins) => {
+        const title  = ISSUE_TITLES[ins.id] || "Item to review";
+        const action = extractAction(ins.line);
+        // Explanation = full insight line minus the action (last sentence),
+        // so the two columns don't repeat. If only one sentence exists,
+        // show it as the explanation and keep action generic.
+        const sentences = (ins.line || "").split(/(?<=[.!?])\s+/).filter(Boolean);
+        const explanation = sentences.length > 1
+          ? sentences.slice(0, -1).join(" ")
+          : (ins.line || "");
+        const actionText = sentences.length > 1
+          ? action
+          : "Confirm before filing.";
+        wsReview["A" + revRow] = { v: title,       t: "s", s: flagIssueStyle };
+        wsReview["B" + revRow] = { v: explanation, t: "s", s: flagBodyStyle };
+        wsReview["C" + revRow] = { v: actionText,  t: "s", s: flagBodyStyle };
+        revRow++;
+      });
     }
-    rowHeights[8 + shift - 1] = { hpt: 22 };       // Category Breakdown section label
-    rowHeights[9 + shift - 1] = { hpt: 22 };       // table header
-    ws2["!rows"] = rowHeights;
+
+    const revDiscRow = revRow + 1;
+    wsReview["A" + revDiscRow] = {
+      v: "Flags are auto-generated heuristics, not errors. None of them require action without preparer review.",
+      t: "s",
+      s: disclaimerStyle,
+    };
+    wsReview["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 2 } },
+      { s: { r: revDiscRow - 1, c: 0 }, e: { r: revDiscRow - 1, c: 2 } },
+    ];
+    wsReview["!ref"]  = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 2, r: revDiscRow - 1 } });
+    wsReview["!cols"] = [{ wch: 36 }, { wch: 60 }, { wch: 40 }];
+    wsReview["!freeze"] = { ySplit: REV_HDR_ROW };
+    const revRowHeights = [];
+    revRowHeights[0] = { hpt: 28 };
+    revRowHeights[1] = { hpt: 18 };
+    revRowHeights[2] = { hpt: 16 };
+    revRowHeights[REV_HDR_ROW - 1] = { hpt: 22 };
+    // Each flag row gets variable height based on text length
+    const flagRowsCount = insightsForReview.length || 1;
+    for (let i = 0; i < flagRowsCount; i++) {
+      const ins = insightsForReview[i];
+      const len = (ins?.line || "").length;
+      const extra = Math.max(0, Math.ceil(len / 80) - 1);
+      revRowHeights[REV_HDR_ROW + i] = { hpt: 44 + extra * 14 };
+    }
+    revRowHeights[revDiscRow - 1] = { hpt: 28 };
+    wsReview["!rows"] = revRowHeights;
 
     // ── Build disclaimer / README sheet ──────────────────────
     const disclaimerSheet = XLSX.utils.aoa_to_sheet([
       ["PreFile Organizer — For Preparation & Review Only"],
       [""],
-      ["This document is an organized summary of financial information based on user input and suggested categorization."],
+      ["This workbook is an organized summary of business expenses based on receipts you entered. It is not a completed tax return."],
       [""],
-      ["It is not a completed tax return and should not be used for filing without review."],
+      ["What's inside:"],
+      ["  • Master Summary — top totals, top categories, sheet navigator"],
+      ["  • Schedule C Expenses — receipt totals grouped by IRS Schedule C line"],
+      ["  • Business Expenses by Category — every receipt, with its Schedule C line tag"],
+      ["  • Review & Flags — items worth confirming before filing"],
       [""],
-      ["Please confirm all entries with a qualified tax professional before submitting any tax forms."],
+      ["Schedule C line assignments are guidance based on your category selections. Some categories (e.g. equipment, contractor work) may belong on a different line depending on use. A small number of receipts may also be auto-tagged based on merchant patterns (wholesale suppliers → inventory, customs → import duties, etc.) and routed to a different Schedule C line than the user-facing category would suggest. Confirm each placement with your tax professional."],
       [""],
-      ["PreFile is an organizational tool designed to help you collect and structure financial information before filing taxes. It does not provide tax, legal, or financial advice. You are responsible for reviewing all entries before filing."],
+      ["PreFile does not provide tax, legal, or financial advice. You are responsible for reviewing all entries and confirming the return with a qualified tax professional before filing."],
     ]);
     // Header styling — A1 only (bold, larger, dark green)
     disclaimerSheet["A1"] = {
       v: "PreFile Organizer — For Preparation & Review Only",
       t: "s",
       s: {
-        font: { bold: true, color: { rgb: "FF1B5E20" }, name: "Calibri", sz: 14 },
+        font: { bold: true, color: { rgb: "FF1F5F2E" }, name: "Calibri", sz: 14 },
         alignment: { horizontal: "left", vertical: "center", wrapText: true },
+      },
+    };
+    // "What's inside:" label
+    disclaimerSheet["A5"] = {
+      v: "What's inside:",
+      t: "s",
+      s: {
+        font: { bold: true, color: { rgb: "FF6B6B6B" }, name: "Calibri", sz: 12 },
+        alignment: { horizontal: "left", vertical: "center" },
       },
     };
     disclaimerSheet["!cols"] = [{ wch: 110 }];
@@ -3378,18 +3689,24 @@ export default function PreFileApp() {
       { hpt: 8 },  // 2: blank
       { hpt: 32 }, // 3: body
       { hpt: 8 },  // 4: blank
-      { hpt: 22 }, // 5: body
-      { hpt: 8 },  // 6: blank
-      { hpt: 32 }, // 7: body
-      { hpt: 8 },  // 8: blank
-      { hpt: 48 }, // 9: long body
+      { hpt: 22 }, // 5: "What's inside" label
+      { hpt: 18 }, // 6: bullet
+      { hpt: 18 }, // 7: bullet
+      { hpt: 18 }, // 8: bullet
+      { hpt: 18 }, // 9: bullet
+      { hpt: 8 },  // 10: blank
+      { hpt: 36 }, // 11: line-mapping caveat
+      { hpt: 8 },  // 12: blank
+      { hpt: 36 }, // 13: legal disclaimer
     ];
 
     // ── Build & download workbook ────────────────────────────
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, disclaimerSheet, "README — PreFile Organizer");
-    XLSX.utils.book_append_sheet(wb, ws1, "Receipts");
-    XLSX.utils.book_append_sheet(wb, ws2, "Summary");
+    XLSX.utils.book_append_sheet(wb, disclaimerSheet, "README");
+    XLSX.utils.book_append_sheet(wb, wsMaster,        "Master Summary");
+    XLSX.utils.book_append_sheet(wb, wsSchC,          "Schedule C Expenses");
+    XLSX.utils.book_append_sheet(wb, wsBiz,           "Business Expenses");
+    XLSX.utils.book_append_sheet(wb, wsReview,        "Review & Flags");
     XLSX.writeFile(wb, "PreFile_Organizer_2025.xlsx");
     logEvent("EXPORT_COMPLETED", { count: receipts.length, userType: getUserType(receipts) });
     showToast("Color-coded organizer downloaded ✓");
