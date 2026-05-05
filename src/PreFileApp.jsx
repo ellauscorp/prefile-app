@@ -514,14 +514,14 @@ function computeInsights(receipts) {
       const verb = n === 1 ? "is" : "are";
       insights.push({
         id: "meals_high_dollar", tier: 1, priority: 100, conversionScore: 85,
-        line: `${n} of your meal receipts ${verb} over $75. These typically require documented attendees and a business purpose — add these notes before filing, or they can be disallowed if reviewed.`,
+        line: `Your file flags ${n} meal receipt${n>1?'s':''} ${verb} over $75 — these need documented attendees and business purpose. Review before filing.`,
       });
     } else {
       const overstateBy = mealsTotal * 0.5;
       const entryWord   = mealReceipts.length === 1 ? "entry" : "entries";
       insights.push({
         id: "meals_50pct", tier: 1, priority: 75, conversionScore: 78,
-        line: `Your meals total $${mealsTotal.toFixed(0)} across ${mealReceipts.length} ${entryWord}. If these are filed at 100%, this could overstate your deductions by about $${overstateBy.toFixed(0)}, since meals are typically only 50% deductible. Check that the meals deduction is filed at 50%, not 100%.`,
+        line: `Your file flags $${mealsTotal.toFixed(0)} in meals across ${mealReceipts.length} ${entryWord} — if filed at 100%, this overstates by $${overstateBy.toFixed(0)} since meals are typically 50% deductible. Confirm with your tax professional.`,
       });
     }
   }
@@ -538,7 +538,7 @@ function computeInsights(receipts) {
     );
     insights.push({
       id: "mileage_gap", tier: 1, priority: 95, conversionScore: 140,
-      line: `You logged $${gasTotal.toFixed(0)} in gas and parking but no business mileage. The IRS standard mileage rate is $0.67/mile for 2025 — most freelancers who drive for work miss $1,500–$3,000 in deductible mileage. Add your mileage estimate before filing.`,
+      line: `Your file flags $${gasTotal.toFixed(0)} in gas/parking but no business mileage — at the 2025 IRS rate ($0.67/mile), $1,500–$3,000 in mileage deductions are likely missing. Adjust if needed.`,
     });
   }
 
@@ -547,7 +547,7 @@ function computeInsights(receipts) {
   if (insuranceTotal === 0 && grandBiz >= 5000) {
     insights.push({
       id: "health_insurance_missing", tier: 1, priority: 90, conversionScore: 130,
-      line: `You have no health insurance recorded. Self-employed freelancers can deduct 100% of health insurance premiums on Schedule 1 — for typical coverage that's $4,800–$9,600 per year. If you pay for your own coverage, this is one of the largest single deductions you can claim. Add this entry before filing if it applies to you.`,
+      line: `Your file flags no self-employed health insurance — typical coverage runs $4,800–$9,600/year and is one of the largest single Schedule 1 deductions. Confirm with your tax professional.`,
     });
   }
 
@@ -586,7 +586,7 @@ function computeInsights(receipts) {
     const subWord = subscriptions.length === 1 ? "recurring subscription" : "recurring subscriptions";
     insights.push({
       id: "subscription_velocity", tier: 1, priority: 85, conversionScore: 90,
-      line: `We detected ${subscriptions.length} ${subWord} in your data (${merchantList}). At your pace, these total $${annualizedTotal.toFixed(0)}/year — make sure you're claiming the full year, not just the months you logged.`,
+      line: `Your file flags ${subscriptions.length} recurring ${subWord} (${merchantList}) — at your pace, these annualize to $${annualizedTotal.toFixed(0)}/year. Confirm with your tax professional.`,
     });
   }
 
@@ -602,7 +602,7 @@ function computeInsights(receipts) {
         .reduce((s, r) => s + (parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100), 0);
     insights.push({
       id: "home_office_with_signal", tier: 1, priority: 80, conversionScore: 88,
-      line: `You logged $${utilTotal.toFixed(0)} in utilities/internet but no home office expense. If you work from home, the simplified home office deduction is $5/sq ft up to 300 sq ft — up to $1,500/year. This is one of the most commonly missed deductions for freelancers. Add a home office entry before filing if you qualify.`,
+      line: `Your file flags $${utilTotal.toFixed(0)} in utilities but no home office entry — the simplified deduction is up to $1,500/year. Adjust if needed.`,
     });
   }
 
@@ -618,7 +618,7 @@ function computeInsights(receipts) {
   if (dupes) {
     insights.push({
       id: "duplicate_entries", tier: 1, priority: 75, conversionScore: 70,
-      line: `You have duplicate entries on ${dupes[0].date}: ${dupes[0].merchant} for $${parseFloat(dupes[0].amount).toFixed(2)}, listed ${dupes.length} times. If this is a duplicate entry, remove it before filing — duplicates can inflate your deduction.`,
+      line: `Your file flags duplicate entries on ${dupes[0].date}: ${dupes[0].merchant} for $${parseFloat(dupes[0].amount).toFixed(2)}, listed ${dupes.length} times. Review before filing.`,
     });
   }
 
@@ -630,7 +630,7 @@ function computeInsights(receipts) {
     const merchants = [...new Set(mixedUse100.map(r => r.merchant))].slice(0, 3).join(", ");
     insights.push({
       id: "mixed_use_100pct", tier: 1, priority: 70, conversionScore: 75,
-      line: `You marked ${mixedUse100.length} purchases from ${merchants} as 100% business. These are merchants where personal use can slip in — if any portion was personal, claiming 100% may not be allowed if reviewed. Review and adjust the business % where appropriate.`,
+      line: `Your file flags ${mixedUse100.length} purchases from ${merchants} marked 100% business — personal use of these portions is disallowed. Adjust if needed.`,
     });
   }
 
@@ -642,7 +642,7 @@ function computeInsights(receipts) {
   if (roundedEntries.length >= 3) {
     insights.push({
       id: "rounded_numbers", tier: 1, priority: 65, conversionScore: 80,
-      line: `Several of your entries appear rounded (e.g., $100, $500). Estimated values may attract questions — consider reviewing these against actual receipts.`,
+      line: `Your file flags several rounded entries (e.g., $100, $500) — these read as estimates, not exact amounts. Review before filing.`,
     });
   }
 
@@ -652,7 +652,7 @@ function computeInsights(receipts) {
     if (mealsPct > 30) {
       insights.push({
         id: "meals_high_ratio", tier: 1, priority: 60, conversionScore: 55,
-        line: `Meals make up ${mealsPct.toFixed(0)}% of your expenses, which is unusually high and may attract questions if not well documented. Confirm each meal entry has a business purpose noted before filing.`,
+        line: `Your file flags meals at ${mealsPct.toFixed(0)}% of total expenses — unusually high for most businesses. Confirm with your tax professional.`,
       });
     }
   }
@@ -695,7 +695,7 @@ function computeInsights(receipts) {
         const gapLabel = gap.length === 1 ? gapStart : `${gapStart}–${gapEnd}`;
         insights.push({
           id: "date_gaps", tier: 2, priority: 50, conversionScore: 45,
-          line: `Your receipts span ${monthName(first)}–${monthName(last)}, but we see a gap in ${gapLabel}. Either no business activity happened then — or receipts from those months aren't logged yet. Review your records for those months before filing — missing months can mean unclaimed deductions.`,
+          line: `Your file flags a gap in ${gapLabel} — your receipts span ${monthName(first)}–${monthName(last)} but those months have no entries. Review before filing.`,
         });
       }
     }
@@ -706,7 +706,7 @@ function computeInsights(receipts) {
   if (topPct >= 40) {
     insights.push({
       id: "category_dominance", tier: 2, priority: 45, conversionScore: 60,
-      line: `${sorted[0][0]} makes up ${topPct.toFixed(0)}% of your expenses — unusually high concentration in one category. Confirm accuracy before filing.`,
+      line: `Your file flags ${sorted[0][0]} at ${topPct.toFixed(0)}% of total expenses — unusually concentrated in one category. Confirm with your tax professional.`,
     });
   }
 
@@ -721,7 +721,7 @@ function computeInsights(receipts) {
     );
     insights.push({
       id: "small_accumulation", tier: 2, priority: 40, conversionScore: 50,
-      line: `You have ${smallEntries.length} small expenses under $10 totaling $${smallTotal.toFixed(0)}. These add up — review that each is business-related, since high volumes of small entries can attract questions if reviewed.`,
+      line: `Your file flags ${smallEntries.length} small entries under $10 totaling $${smallTotal.toFixed(0)} — high volume of tiny entries can trigger review. Review before filing.`,
     });
   }
 
@@ -1663,15 +1663,15 @@ const TEASER_BY_ID = {
   home_office_with_signal:  "You may be missing a home office deduction.",
 };
 const PAYWALL_BY_ID = {
-  mileage_gap:              "Your file flags $1,500–$3,000 in business mileage to review with your tax professional.",
-  health_insurance_missing: "Your file flags self-employed health insurance — typically $4,800–$9,600 — to review with your tax professional.",
-  home_office_with_signal:  "Your file flags a possible home office deduction — up to $1,500 — to review with your tax professional.",
-  meals_high_dollar:        "Your file flags higher-dollar meals to confirm with your tax professional.",
-  mixed_use_100pct:         "Your file flags mixed-use purchases to review with your tax professional.",
-  duplicate_entries:        "Your file flags possible duplicate entries to confirm with your tax professional.",
-  rounded_numbers:          "Your file flags rounded amounts to confirm with your tax professional.",
-  subscription_velocity:    "Your file flags recurring charges that may not be fully captured across the year — to review with your tax professional.",
-  meals_50pct:              "Your file flags meals to confirm at the right deduction percentage with your tax professional.",
+  mileage_gap:              "Your file flags $1,500–$3,000 in business mileage. Adjust if needed.",
+  health_insurance_missing: "Your file flags self-employed health insurance — typically $4,800–$9,600. Confirm with your tax professional.",
+  home_office_with_signal:  "Your file flags a home office deduction up to $1,500. Adjust if needed.",
+  meals_high_dollar:        "Your file flags higher-dollar meals that need documented attendees and business purpose. Review before filing.",
+  mixed_use_100pct:         "Your file flags mixed-use purchases marked 100% business. Adjust if needed.",
+  duplicate_entries:        "Your file flags possible duplicate entries. Review before filing.",
+  rounded_numbers:          "Your file flags rounded entries that read as estimates. Review before filing.",
+  subscription_velocity:    "Your file flags recurring charges that span less than a full year. Confirm with your tax professional.",
+  meals_50pct:              "Your file flags meals filed at 100% — meals are typically 50% deductible. Confirm with your tax professional.",
 };
 
 // eslint-disable-next-line no-unused-vars
@@ -2516,15 +2516,44 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
           .sort((a, b) => b[1] - a[1])
           .slice(0, 5);
 
-        // Top 2-3 insights via paywall formatter (document-tone, not teaser-tone)
+        // Top 2 insights via paywall formatter (document-tone, not teaser-tone)
         const allInsights = computeInsights(receipts).all || [];
-        const flagsToShow = allInsights.slice(0, 3);
+        const flagsToShow = allInsights.slice(0, 2);
+
+        // Dynamic status — 0 flags = clean, ≥1 = ready with caveats
+        const statusText = flagsToShow.length === 0
+          ? "Ready for Review"
+          : "Ready — with items to review";
+
+        // IRS Schedule C 2024 line → form-side category names. Used only
+        // for the Master Summary preview to format "Line 27a (Other expenses)"
+        // alongside the user-facing PreFile category in column 1. Kept
+        // local to this IIFE since it's a display-only mapping.
+        const IRS_LINE_NAMES = {
+          "Line 8":   "Advertising",
+          "Line 9":   "Car and truck expenses",
+          "Line 11":  "Contract labor",
+          "Line 15":  "Insurance",
+          "Line 17":  "Legal and professional services",
+          "Line 18":  "Office expense",
+          "Line 20b": "Rent — other business property",
+          "Line 22":  "Supplies",
+          "Line 23":  "Taxes and licenses",
+          "Line 24a": "Travel",
+          "Line 24b": "Deductible meals",
+          "Line 25":  "Utilities",
+          "Line 27a": "Other expenses",
+        };
 
         // Document-feel typography helper
         const docLabelStyle = {
           fontSize: 10, fontWeight: 700, color: C.inkFaint,
           textTransform: "uppercase", letterSpacing: "0.08em",
           marginBottom: 10,
+        };
+        const docTrustLineStyle = {
+          fontSize: 12, color: C.inkLight, fontStyle: "italic",
+          lineHeight: 1.5, marginTop: -10, marginBottom: 22,
         };
 
         return (
@@ -2551,21 +2580,21 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
               </div>
               <div style={{
                 fontSize: 11, fontStyle: "italic", color: C.forest,
-                letterSpacing: "0.02em",
+                letterSpacing: "0.02em", textAlign: "right",
               }}>
-                Ready for Review
+                {statusText}
               </div>
             </div>
             <div style={{ fontSize: 12, color: C.inkFaint, marginBottom: 22 }}>
               Business · Tax Year {taxYear}
             </div>
 
-            {/* Quick Overview — three-row label/value grid.
+            {/* Quick Overview — three-row label/value grid + trust line.
                 Net Profit visibly present but rendered as "—" since PreFile
                 doesn't track income. Maintains CPA-expected structure while
                 being honest about the data gap. */}
             <div style={docLabelStyle}>Quick Overview</div>
-            <div style={{ marginBottom: 22 }}>
+            <div style={{ marginBottom: 10 }}>
               {[
                 ["Total Income",   "— (not tracked)"],
                 ["Total Expenses", `$${total.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`],
@@ -2587,9 +2616,18 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                 </div>
               ))}
             </div>
+            <div style={{ fontSize: 12, color: C.inkLight, lineHeight: 1.5, marginBottom: 22 }}>
+              Structured and ready for CPA review — prepared for filing.
+            </div>
 
-            {/* Schedule C Snapshot — top 5 rows: Category · IRS Line · Amount */}
+            {/* Schedule C Snapshot — top 5 rows.
+                Intro line frames the section as preparer-ready.
+                IRS Line cell reads "Line X (IRS form category)" so a
+                preparer sees both the line number and the form-page name. */}
             <div style={docLabelStyle}>Schedule C Snapshot</div>
+            <div style={docTrustLineStyle}>
+              This is what your tax professional uses to file Schedule C.
+            </div>
             <div style={{ marginBottom: flagsToShow.length > 0 ? 22 : 4 }}>
               {topCategories.map(([cat, amount]) => {
                 const ref = SCHEDULE_C_REFERENCE[cat] || "Varies";
@@ -2599,17 +2637,21 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                   : ref.startsWith("Varies")
                     ? "Varies"
                     : ref;
+                // Append IRS form category in parens when known
+                const lineLabel = IRS_LINE_NAMES[lineCompact]
+                  ? `${lineCompact} (${IRS_LINE_NAMES[lineCompact]})`
+                  : lineCompact;
                 return (
                   <div key={cat} style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr auto auto",
+                    gridTemplateColumns: "1.4fr 1.6fr auto",
                     gap: 16,
                     padding: "5px 0", fontSize: 13,
                     borderBottom: `1px solid ${C.creamDark}`,
                     alignItems: "baseline",
                   }}>
                     <span style={{ color: C.ink }}>{cat}</span>
-                    <span style={{ color: C.inkFaint, fontSize: 11 }}>{lineCompact}</span>
+                    <span style={{ color: C.inkFaint, fontSize: 11 }}>{lineLabel}</span>
                     <span style={{ color: C.ink, fontWeight: 600, minWidth: 70, textAlign: "right" }}>
                       ${amount.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                     </span>
@@ -2618,11 +2660,12 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
               })}
             </div>
 
-            {/* Review & Flags — top 2-3 insight summaries via paywall formatter */}
+            {/* Review & Flags — exactly 2 items via paywall formatter,
+                post-processed to use imperative action phrases */}
             {flagsToShow.length > 0 && (
               <>
                 <div style={docLabelStyle}>Review &amp; Flags</div>
-                <div>
+                <div style={{ marginBottom: 18 }}>
                   {flagsToShow.map((ins, i) => (
                     <div key={ins.id || i} style={{
                       fontSize: 13, color: C.inkLight, lineHeight: 1.6,
@@ -2634,6 +2677,15 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                 </div>
               </>
             )}
+
+            {/* Footer attribution — small, centered, muted */}
+            <div style={{
+              fontSize: 10, color: C.inkFaint, textAlign: "center",
+              marginTop: flagsToShow.length > 0 ? 4 : 18,
+              letterSpacing: "0.04em",
+            }}>
+              Generated by PreFile
+            </div>
           </div>
         );
       })()}
