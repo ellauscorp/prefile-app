@@ -3686,12 +3686,17 @@ export default function PreFileApp() {
       alignment: { horizontal: "left", vertical: "center" },
     };
     const bylineStyle = {
-      font:      { italic: true, color: { rgb: "FF4A4A4A" }, name: "Calibri", sz: 10 },
+      font:      { italic: true, color: { rgb: "FF3A6B40" }, name: "Calibri", sz: 10 },
       alignment: { horizontal: "left", vertical: "center" },
     };
     const sectionLabelStyle = {
-      font:      { bold: true, color: { rgb: "FF6B6B6B" }, name: "Calibri", sz: 12 },
+      font:      { bold: true, color: { rgb: "FF1F5F2E" }, name: "Calibri", sz: 13 },
       alignment: { horizontal: "left", vertical: "center" },
+      fill:      { patternType: "solid", fgColor: { rgb: "FFF4FAF6" } },
+      border:    {
+        left:   { style: "medium", color: { rgb: "FF1B5E20" } },
+        bottom: { style: "thin",   color: { rgb: "FFD6E8DC" } },
+      },
     };
     const tableHeaderStyle = {
       font:      { bold: true, color: { rgb: "FFFFFFFF" }, name: "Calibri", sz: 11 },
@@ -3759,6 +3764,7 @@ export default function PreFileApp() {
     const disclaimerStyle = {
       font:      { italic: true, color: { rgb: "FF9A9A97" }, name: "Calibri", sz: 9 },
       alignment: { horizontal: "left", vertical: "center", wrapText: true },
+      border:    { top: { style: "thin", color: { rgb: "FFD6E8DC" } } },
     };
 
     // ──────────────────────────────────────────────────────────────────────
@@ -4139,54 +4145,122 @@ export default function PreFileApp() {
     wsReview["!rows"] = revRowHeights;
 
     // ── Build disclaimer / README sheet ──────────────────────
-    const disclaimerSheet = XLSX.utils.aoa_to_sheet([
-      ["PreFile Organizer — Filing-Ready Summary"],
-      [""],
-      ["This workbook is a filing-ready summary of your business expenses, prepared for your tax professional. It is not a completed tax return — your tax professional finalizes and files it."],
-      [""],
-      ["What's inside:"],
-      ["  • Master Summary — top totals, top categories, sheet navigator"],
-      ["  • Schedule C Expenses — receipt totals grouped by IRS Schedule C line"],
-      ["  • Business Expenses by Category — every receipt, with its Schedule C line tag"],
-      ["  • Review & Flags — items worth confirming before filing"],
-      [""],
-      ["Schedule C line assignments are guidance based on your category selections. Some categories (e.g. equipment, contractor work) may belong on a different line depending on use. A small number of receipts may also be auto-tagged based on merchant patterns (wholesale suppliers → inventory, customs → import duties, etc.) and routed to a different Schedule C line than the user-facing category would suggest. Confirm each placement with your tax professional."],
-      [""],
-      ["PreFile does not provide tax, legal, or financial advice. You are responsible for reviewing all entries and confirming the return with a qualified tax professional before filing."],
-    ]);
-    // Header styling — A1 only (bold, larger, dark green)
-    disclaimerSheet["A1"] = {
-      v: "PreFile Organizer — Filing-Ready Summary",
-      t: "s",
-      s: {
-        font: { bold: true, color: { rgb: "FF1F5F2E" }, name: "Calibri", sz: 14 },
-        alignment: { horizontal: "left", vertical: "center", wrapText: true },
-      },
+    // Build README using a structured cell-by-cell layout (matches the design
+    // tier of Master Summary). 2-column grid: col A holds title/section labels
+    // and the "Sheet" column of the navigator; col B holds nav-table descriptions
+    // and is merged with col A for body-paragraph rows.
+    const disclaimerSheet = {};
+
+    // Row 1: title band (merged A1:B1)
+    disclaimerSheet["A1"] = { v: "PreFile Organizer — Filing-Ready Summary", t: "s", s: titleStyle };
+    disclaimerSheet["B1"] = { v: "", t: "s", s: titleStyle };
+
+    // Row 2: subheader (merged A2:B2)
+    disclaimerSheet["A2"] = { v: "Tax Year 2025  ·  Workbook guide", t: "s", s: subheaderStyle };
+    disclaimerSheet["B2"] = { v: "", t: "s", s: subheaderStyle };
+
+    // Row 3: byline (merged A3:B3)
+    disclaimerSheet["A3"] = { v: "What this workbook is for and how it's organized.", t: "s", s: bylineStyle };
+    disclaimerSheet["B3"] = { v: "", t: "s", s: bylineStyle };
+
+    // Row 5: section label "What's inside"
+    disclaimerSheet["A5"] = { v: "What's inside", t: "s", s: sectionLabelStyle };
+    disclaimerSheet["B5"] = { v: "", t: "s", s: sectionLabelStyle };
+
+    // Row 6: navigator table headers
+    disclaimerSheet["A6"] = { v: "Sheet",         t: "s", s: tableHeaderStyle };
+    disclaimerSheet["B6"] = { v: "What it shows", t: "s", s: tableHeaderStyle };
+
+    // Rows 7-10: navigator table body (zebra-striped)
+    const readmeNavRows = [
+      ["Master Summary",            "Top totals, top categories, sheet navigator"],
+      ["Schedule C Expenses",       "Receipt totals grouped by IRS Schedule C line"],
+      ["Business Expenses",         "Every receipt, with its Schedule C line tag"],
+      ["Review & Flags",            "Items worth confirming before filing"],
+    ];
+    readmeNavRows.forEach((row, idx) => {
+      const r = 7 + idx;
+      const isOdd = idx % 2 === 1;
+      const bodyStyle = isOdd ? dataRowOddStyle : dataRowEvenStyle;
+      disclaimerSheet["A" + r] = { v: row[0], t: "s", s: bodyStyle };
+      disclaimerSheet["B" + r] = { v: row[1], t: "s", s: bodyStyle };
+    });
+
+    // Row 12: section label "About this workbook"
+    disclaimerSheet["A12"] = { v: "About this workbook", t: "s", s: sectionLabelStyle };
+    disclaimerSheet["B12"] = { v: "", t: "s", s: sectionLabelStyle };
+
+    // Row 13: body paragraph (merged A13:B13)
+    const aboutBodyStyle = {
+      font:      { color: { rgb: "FF1A1A18" }, name: "Calibri", sz: 11 },
+      alignment: { horizontal: "left", vertical: "top", wrapText: true },
     };
-    // "What's inside:" label
-    disclaimerSheet["A5"] = {
-      v: "What's inside:",
+    disclaimerSheet["A13"] = {
+      v: "This workbook is a filing-ready summary of your business expenses, prepared for your tax professional. It is not a completed tax return — your tax professional finalizes and files it.",
       t: "s",
-      s: {
-        font: { bold: true, color: { rgb: "FF6B6B6B" }, name: "Calibri", sz: 12 },
-        alignment: { horizontal: "left", vertical: "center" },
-      },
+      s: aboutBodyStyle,
     };
-    disclaimerSheet["!cols"] = [{ wch: 110 }];
+    disclaimerSheet["B13"] = { v: "", t: "s", s: aboutBodyStyle };
+
+    // Row 15: section label "Schedule C line caveats"
+    disclaimerSheet["A15"] = { v: "Schedule C line caveats", t: "s", s: sectionLabelStyle };
+    disclaimerSheet["B15"] = { v: "", t: "s", s: sectionLabelStyle };
+
+    // Row 16: caveat paragraph (merged A16:B16)
+    disclaimerSheet["A16"] = {
+      v: "Schedule C line assignments are guidance based on your category selections. Some categories (e.g. equipment, contractor work) may belong on a different line depending on use. A small number of receipts may also be auto-tagged based on merchant patterns (wholesale suppliers → inventory, customs → import duties, etc.) and routed to a different Schedule C line than the user-facing category would suggest. Confirm each placement with your tax professional.",
+      t: "s",
+      s: aboutBodyStyle,
+    };
+    disclaimerSheet["B16"] = { v: "", t: "s", s: aboutBodyStyle };
+
+    // Row 18: footer disclaimer (merged A18:B18) — uses bordered disclaimerStyle
+    disclaimerSheet["A18"] = {
+      v: "PreFile does not provide tax, legal, or financial advice. You are responsible for reviewing all entries and confirming the return with a qualified tax professional before filing.",
+      t: "s",
+      s: disclaimerStyle,
+    };
+    disclaimerSheet["B18"] = { v: "", t: "s", s: disclaimerStyle };
+
+    // Sheet bounds — must explicitly set !ref for cell-by-cell built sheets
+    disclaimerSheet["!ref"] = "A1:B18";
+
+    // Column widths: col A holds sheet names + section labels (28), col B holds descriptions (82)
+    disclaimerSheet["!cols"] = [{ wch: 28 }, { wch: 82 }];
+
+    // Row heights — title 32, subheader/byline 18/16, section labels 22, body paragraphs taller for wrapping
     disclaimerSheet["!rows"] = [
-      { hpt: 26 }, // 1: header
-      { hpt: 8 },  // 2: blank
-      { hpt: 32 }, // 3: body
-      { hpt: 8 },  // 4: blank
-      { hpt: 22 }, // 5: "What's inside" label
-      { hpt: 18 }, // 6: bullet
-      { hpt: 18 }, // 7: bullet
-      { hpt: 18 }, // 8: bullet
-      { hpt: 18 }, // 9: bullet
-      { hpt: 8 },  // 10: blank
-      { hpt: 36 }, // 11: line-mapping caveat
-      { hpt: 8 },  // 12: blank
-      { hpt: 36 }, // 13: legal disclaimer
+      { hpt: 32 }, // 1: title band
+      { hpt: 18 }, // 2: subheader
+      { hpt: 16 }, // 3: byline
+      { hpt: 8 },  // 4: spacer
+      { hpt: 22 }, // 5: section label "What's inside"
+      { hpt: 22 }, // 6: nav table header
+      { hpt: 18 }, // 7: nav row 1
+      { hpt: 18 }, // 8: nav row 2
+      { hpt: 18 }, // 9: nav row 3
+      { hpt: 18 }, // 10: nav row 4
+      { hpt: 8 },  // 11: spacer
+      { hpt: 22 }, // 12: section label "About"
+      { hpt: 36 }, // 13: about body paragraph
+      { hpt: 8 },  // 14: spacer
+      { hpt: 22 }, // 15: section label "Caveats"
+      { hpt: 56 }, // 16: caveat paragraph (longest)
+      { hpt: 12 }, // 17: spacer
+      { hpt: 36 }, // 18: footer disclaimer
+    ];
+
+    // Merges: span title/subheader/byline/section labels/body paragraphs across both columns
+    disclaimerSheet["!merges"] = [
+      { s: { r: 0,  c: 0 }, e: { r: 0,  c: 1 } }, // title
+      { s: { r: 1,  c: 0 }, e: { r: 1,  c: 1 } }, // subheader
+      { s: { r: 2,  c: 0 }, e: { r: 2,  c: 1 } }, // byline
+      { s: { r: 4,  c: 0 }, e: { r: 4,  c: 1 } }, // "What's inside" label
+      { s: { r: 11, c: 0 }, e: { r: 11, c: 1 } }, // "About this workbook" label
+      { s: { r: 12, c: 0 }, e: { r: 12, c: 1 } }, // about body
+      { s: { r: 14, c: 0 }, e: { r: 14, c: 1 } }, // "Schedule C line caveats" label
+      { s: { r: 15, c: 0 }, e: { r: 15, c: 1 } }, // caveat body
+      { s: { r: 17, c: 0 }, e: { r: 17, c: 1 } }, // footer disclaimer
     ];
 
     // ── Build & download workbook ────────────────────────────
