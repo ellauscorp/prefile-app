@@ -1260,8 +1260,8 @@ function AddReceiptScreen({ onMethod, isMobile }) {
         {isMobile ? (
           <button className="method-card primary" onClick={() => onMethod("scan")} style={{ gridColumn:"1/-1" }}>
             <span style={{ fontSize:36 }}>📷</span>
-            <div style={{ fontSize:16, fontWeight:700, color:C.forest, fontFamily:"'Fraunces', serif" }}>Scan receipt</div>
-            <div style={{ fontSize:12, color:C.inkFaint }}>Point your camera at any receipt</div>
+            <div style={{ fontSize:16, fontWeight:700, color:C.forest, fontFamily:"'Fraunces', serif" }}>Scan a document</div>
+            <div style={{ fontSize:12, color:C.inkFaint }}>Point your camera at any document</div>
           </button>
         ) : (
           <button className="method-card primary" onClick={() => onMethod("upload")}>
@@ -1280,7 +1280,7 @@ function AddReceiptScreen({ onMethod, isMobile }) {
         ) : (
           <button className="method-card" onClick={() => onMethod("scan")}>
             <span style={{ fontSize:30 }}>📷</span>
-            <div style={{ fontSize:14, fontWeight:600, color:C.ink }}>Scan receipt</div>
+            <div style={{ fontSize:14, fontWeight:600, color:C.ink }}>Scan a document</div>
             <div style={{ fontSize:12, color:C.inkFaint }}>Use your camera</div>
           </button>
         )}
@@ -1679,7 +1679,11 @@ const PAYWALL_BY_ID = {
 // eslint-disable-next-line no-unused-vars
 function formatTeaserInsight(insight, userType) {
   if (!insight) return "";
-  return TEASER_BY_ID[insight.id] || insight.line || "";
+  // Prefer the specific compute-side .line string over the generic TEASER_BY_ID
+  // copy — the .line string is anchored in the user's actual numbers/merchants
+  // and lands the "I would have missed this on my own" moment. TEASER_BY_ID
+  // remains as a defensive fallback if .line is ever missing.
+  return insight.line || TEASER_BY_ID[insight.id] || "";
 }
 
 // eslint-disable-next-line no-unused-vars
@@ -2301,9 +2305,12 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 700, color: C.ink, letterSpacing: "-0.3px" }}>
-            Your organized totals
+            Your tax file is in progress
           </h2>
-          <p style={{ fontSize: 13, color: C.inkFaint, marginTop: 4 }}>
+          <p style={{ fontSize: 12, color: C.forestMid, marginTop: 4, fontWeight: 500 }}>
+            Saved on this device and ready to build over time
+          </p>
+          <p style={{ fontSize: 13, color: C.inkFaint, marginTop: 6 }}>
             Estimated totals for organization purposes — review before filing
           </p>
           {n > 0 && (
@@ -2529,7 +2536,7 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                 fontSize: 11, fontWeight: 700, color: "#7A5C0A",
                 textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4,
               }}>
-                We noticed
+                Found in your file
               </div>
               <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.55 }}>
                 {formatTeaserInsight(teaserInsight, userType)}
