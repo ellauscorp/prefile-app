@@ -521,7 +521,7 @@ function computeInsights(receipts) {
       const entryWord   = mealReceipts.length === 1 ? "entry" : "entries";
       insights.push({
         id: "meals_50pct", tier: 1, priority: 75, conversionScore: 78,
-        line: `Your file flags $${mealsTotal.toFixed(0)} in meals across ${mealReceipts.length} ${entryWord} — if filed at 100%, this overstates by $${overstateBy.toFixed(0)} since meals are typically 50% deductible. Confirm with your tax professional.`,
+        line: `Your file flags $${mealsTotal.toFixed(0)} in meals across ${mealReceipts.length} ${entryWord} — if filed at 100%, this overstates by $${overstateBy.toFixed(0)} — meals are typically 50% deductible. Confirm with your tax professional.`,
       });
     }
   }
@@ -538,7 +538,7 @@ function computeInsights(receipts) {
     );
     insights.push({
       id: "mileage_gap", tier: 1, priority: 95, conversionScore: 140,
-      line: `Your file flags $${gasTotal.toFixed(0)} in gas/parking but no business mileage — at the 2025 IRS rate ($0.67/mile), $1,500–$3,000 in mileage deductions are likely missing. Adjust if needed.`,
+      line: `Your file flags $${gasTotal.toFixed(0)} in gas/parking but no business mileage — $1,500–$3,000 in mileage deductions are missing (2025 IRS rate: $0.67/mile). Adjust if needed.`,
     });
   }
 
@@ -547,7 +547,7 @@ function computeInsights(receipts) {
   if (insuranceTotal === 0 && grandBiz >= 5000) {
     insights.push({
       id: "health_insurance_missing", tier: 1, priority: 90, conversionScore: 130,
-      line: `Your file flags no self-employed health insurance — typical coverage runs $4,800–$9,600/year and is one of the largest single Schedule 1 deductions. Confirm with your tax professional.`,
+      line: `Your file flags no self-employed health insurance — typical coverage runs $4,800–$9,600/year and is one of the largest Schedule 1 deductions. Confirm with your tax professional.`,
     });
   }
 
@@ -586,7 +586,7 @@ function computeInsights(receipts) {
     const subWord = subscriptions.length === 1 ? "recurring subscription" : "recurring subscriptions";
     insights.push({
       id: "subscription_velocity", tier: 1, priority: 85, conversionScore: 90,
-      line: `Your file flags ${subscriptions.length} recurring ${subWord} (${merchantList}) — at your pace, these annualize to $${annualizedTotal.toFixed(0)}/year. Confirm with your tax professional.`,
+      line: `Your file flags ${subscriptions.length} recurring ${subWord} (${merchantList}) — these annualize to $${annualizedTotal.toFixed(0)}/year. Confirm with your tax professional.`,
     });
   }
 
@@ -618,7 +618,7 @@ function computeInsights(receipts) {
   if (dupes) {
     insights.push({
       id: "duplicate_entries", tier: 1, priority: 75, conversionScore: 70,
-      line: `Your file flags duplicate entries on ${dupes[0].date}: ${dupes[0].merchant} for $${parseFloat(dupes[0].amount).toFixed(2)}, listed ${dupes.length} times. Review before filing.`,
+      line: `Your file flags possible duplicate entries on ${dupes[0].date}: ${dupes[0].merchant} for $${parseFloat(dupes[0].amount).toFixed(2)}, listed ${dupes.length} times. Review before filing.`,
     });
   }
 
@@ -630,7 +630,7 @@ function computeInsights(receipts) {
     const merchants = [...new Set(mixedUse100.map(r => r.merchant))].slice(0, 3).join(", ");
     insights.push({
       id: "mixed_use_100pct", tier: 1, priority: 70, conversionScore: 75,
-      line: `Your file flags ${mixedUse100.length} purchases from ${merchants} marked 100% business — personal use of these portions is disallowed. Adjust if needed.`,
+      line: `Your file flags ${mixedUse100.length} purchases from ${merchants} marked 100% business — personal use is not deductible. Adjust if needed.`,
     });
   }
 
@@ -642,7 +642,7 @@ function computeInsights(receipts) {
   if (roundedEntries.length >= 3) {
     insights.push({
       id: "rounded_numbers", tier: 1, priority: 65, conversionScore: 80,
-      line: `Your file flags several rounded entries (e.g., $100, $500) — these read as estimates, not exact amounts. Review before filing.`,
+      line: `Your file flags several entries (e.g., $100, $500) — these appear as rounded amounts, not exact amounts. Review before filing.`,
     });
   }
 
@@ -706,7 +706,7 @@ function computeInsights(receipts) {
   if (topPct >= 40) {
     insights.push({
       id: "category_dominance", tier: 2, priority: 45, conversionScore: 60,
-      line: `Your file flags ${sorted[0][0]} at ${topPct.toFixed(0)}% of total expenses — unusually concentrated in one category. Confirm with your tax professional.`,
+      line: `Your file flags ${sorted[0][0]} at ${topPct.toFixed(0)}% of total expenses — unusually concentrated. Confirm with your tax professional.`,
     });
   }
 
@@ -721,7 +721,7 @@ function computeInsights(receipts) {
     );
     insights.push({
       id: "small_accumulation", tier: 2, priority: 40, conversionScore: 50,
-      line: `Your file flags ${smallEntries.length} small entries under $10 totaling $${smallTotal.toFixed(0)} — high volume of tiny entries can trigger review. Review before filing.`,
+      line: `Your file flags ${smallEntries.length} entries under $10 totaling $${smallTotal.toFixed(0)} — high volume can trigger review. Review before filing.`,
     });
   }
 
@@ -1663,15 +1663,15 @@ const TEASER_BY_ID = {
   home_office_with_signal:  "You may be missing a home office deduction.",
 };
 const PAYWALL_BY_ID = {
-  mileage_gap:              "Your file flags $1,500–$3,000 in business mileage. Adjust if needed.",
-  health_insurance_missing: "Your file flags self-employed health insurance — typically $4,800–$9,600. Confirm with your tax professional.",
-  home_office_with_signal:  "Your file flags a home office deduction up to $1,500. Adjust if needed.",
+  mileage_gap:              "Your file flags possible missing mileage deductions of $1,500–$3,000. Adjust if needed.",
+  health_insurance_missing: "Your file flags no self-employed health insurance — a deduction typically worth $4,800–$9,600. Confirm with your tax professional.",
+  home_office_with_signal:  "Your file flags a possible home office deduction — up to $1,500. Adjust if needed.",
   meals_high_dollar:        "Your file flags higher-dollar meals that need documented attendees and business purpose. Review before filing.",
   mixed_use_100pct:         "Your file flags mixed-use purchases marked 100% business. Adjust if needed.",
   duplicate_entries:        "Your file flags possible duplicate entries. Review before filing.",
-  rounded_numbers:          "Your file flags rounded entries that read as estimates. Review before filing.",
+  rounded_numbers:          "Your file flags entries that appear as rounded amounts. Review before filing.",
   subscription_velocity:    "Your file flags recurring charges that span less than a full year. Confirm with your tax professional.",
-  meals_50pct:              "Your file flags meals filed at 100% — meals are typically 50% deductible. Confirm with your tax professional.",
+  meals_50pct:              "Your file flags meals filed at 100% — these are typically 50% deductible. Confirm with your tax professional.",
 };
 
 // eslint-disable-next-line no-unused-vars
