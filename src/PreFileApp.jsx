@@ -2926,17 +2926,21 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                 )}
                 {!isSaved && (
                   <div style={{
-                    marginBottom: 10, padding: "10px 14px",
+                    marginBottom: 8, padding: "9px 12px",
                     background: "#FFFAF0",
                     border: "1px solid rgba(230,184,0,0.35)",
                     borderLeft: "3px solid #E6B800",
                     borderRadius: 10, lineHeight: 1.5,
+                    display: "flex", alignItems: "flex-start", gap: 10,
                   }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 2 }}>
-                      Your receipts aren't saved yet.
-                    </div>
-                    <div style={{ fontSize: 12, color: C.inkLight }}>
-                      Use the button below to save and unlock your download.
+                    <Icon name="zap" size={14} color="#E6B800" strokeWidth={2.2} style={{ marginTop: 3, flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 1 }}>
+                        Your receipts aren't saved yet.
+                      </div>
+                      <div style={{ fontSize: 12, color: C.inkLight }}>
+                        Save them first to unlock your download.
+                      </div>
                     </div>
                   </div>
                 )}
