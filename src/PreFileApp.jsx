@@ -4218,8 +4218,7 @@ export default function PreFileApp() {
     setShowSavedConfirm(true);
     setTimeout(() => setShowSavedConfirm(false), 2500);
     setTimeout(() => {
-      showToast("Your filing-ready summary is ready — download starting…");
-      Promise.resolve().then(() => doExport());
+      showToast("Your filing-ready summary is ready to download.");
     }, 600);
     setTimeout(() => {
       showToast("Saved to your device.");
