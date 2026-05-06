@@ -2263,7 +2263,7 @@ function YearEndSummary({ receipts, onBack, onPrint }) {
   );
 }
 
-function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedConfirm, onGenerateSummary, onClearData, onDeleteReceipt, showDownloadMsg, isDownloading }) {
+function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedConfirm, onGenerateSummary, onClearData, onDeleteReceipt, showDownloadMsg, isDownloading, pendingRestore, onRestore, onDiscardRestore }) {
   const [confirmed, setConfirmed] = useState(false);
   const [monthOpen, setMonthOpen] = useState(false);
   const total = receipts.reduce((s, r) => s + ((parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100)), 0);
@@ -2341,6 +2341,58 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
           )}
         </div>
       </div>
+
+      {/* Resume saved session — appears only when localStorage has prior
+          receipts the user has not yet acknowledged. Replaces the previous
+          silent-restore behavior so users explicitly opt in or discard. */}
+      {pendingRestore && (
+        <div style={{
+          marginBottom: 16, padding: "14px 16px",
+          background: "#FFFAF0",
+          border: "1px solid rgba(230,184,0,0.35)",
+          borderLeft: "3px solid #E6B800",
+          borderRadius: 10, lineHeight: 1.5,
+          display: "flex", flexDirection: "column", gap: 10,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            <Icon name="folder" size={16} color="#E6B800" strokeWidth={2.2} style={{ flexShrink: 0 }} />
+            <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 1 }}>
+                Resume saved receipts?
+              </div>
+              <div style={{ fontSize: 12, color: C.inkLight }}>
+                We found organizer progress saved on this device.
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+              <button
+                onClick={onRestore}
+                style={{
+                  background: C.forest, color: C.white, border: "none",
+                  borderRadius: 9, padding: "8px 14px", fontSize: 12,
+                  fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                Resume saved receipts
+              </button>
+              <button
+                onClick={onDiscardRestore}
+                style={{
+                  background: "transparent", color: C.inkLight, border: "none",
+                  fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  fontFamily: "'DM Sans', sans-serif", textDecoration: "underline",
+                  textUnderlineOffset: 2,
+                }}
+              >
+                Start fresh
+              </button>
+            </div>
+          </div>
+          <div style={{ fontSize: 11, color: C.inkFaint, paddingLeft: 30 }}>
+            Starting fresh will clear the saved organizer on this device.
+          </div>
+        </div>
+      )}
 
       {/* This month + nudge — lightweight monthly habit loop.
           Calm continuity signals only; no notifications, streaks, or progress UI.
@@ -3466,18 +3518,51 @@ export default function PreFileApp() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [receipts.length, isSaved]);
 
-  // ── Persistence: load receipts on mount ──
+  // ── Persistence: measure saved receipts on mount (do NOT silently restore).
+  //    Previously this useEffect called setReceipts(JSON.parse(saved)), which
+  //    silently dropped users back into a list of every receipt they'd ever
+  //    added — frequently dozens — without any continuity cue. Now we capture
+  //    the saved data into pendingRestore and surface a resume banner so the
+  //    user explicitly opts in (resume) or out (discard).
+  const [pendingRestore, setPendingRestore] = useState(null); // { count, data } | null
   useEffect(() => {
     const saved = localStorage.getItem("prefile_receipts");
-    if (saved) {
-      try { setReceipts(JSON.parse(saved)); } catch (e) {}
-    }
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setPendingRestore({ count: parsed.length, data: parsed });
+      }
+    } catch (e) {}
   }, []);
 
+  // Restore the saved receipts when the user explicitly chooses to resume.
+  const handleRestore = () => {
+    if (!pendingRestore) return;
+    setReceipts(pendingRestore.data);
+    setPendingRestore(null);
+  };
+
+  // Discard the saved receipts when the user chooses a fresh start.
+  const handleDiscardRestore = () => {
+    localStorage.removeItem("prefile_receipts");
+    setPendingRestore(null);
+  };
+
   // ── Persistence: save receipts whenever they change ──
+  // If the user adds receipts while a pendingRestore is still live (i.e.
+  // they ignored the resume banner and started fresh), treat that first
+  // write as an implicit "Start fresh" — clear the pending restore and
+  // begin persisting normally. This prevents the new receipts from being
+  // overwritten if the user later clicks Resume.
   useEffect(() => {
+    if (pendingRestore && receipts.length === 0) return; // still empty, don't overwrite saved
+    if (pendingRestore && receipts.length > 0) {
+      // User added something without resuming → implicit discard
+      setPendingRestore(null);
+    }
     localStorage.setItem("prefile_receipts", JSON.stringify(receipts));
-  }, [receipts]);
+  }, [receipts, pendingRestore]);
 
   const showToast = msg => {
     setToast({ visible: true, message: msg });
@@ -4387,7 +4472,7 @@ export default function PreFileApp() {
         )}
         {page === "receipt-flow" && renderReceiptFlow()}
         {page === "organizer" && (
-          <OrganizerScreen receipts={receipts} onAddAnother={handleAddAnother} isSaved={isSaved} onExport={handleExport} showSavedConfirm={showSavedConfirm} onGenerateSummary={handleGenerateSummary} onClearData={handleClearData} onDeleteReceipt={handleDeleteReceipt} showDownloadMsg={showDownloadMsg} isDownloading={isDownloading} />
+          <OrganizerScreen receipts={receipts} onAddAnother={handleAddAnother} isSaved={isSaved} onExport={handleExport} showSavedConfirm={showSavedConfirm} onGenerateSummary={handleGenerateSummary} onClearData={handleClearData} onDeleteReceipt={handleDeleteReceipt} showDownloadMsg={showDownloadMsg} isDownloading={isDownloading} pendingRestore={pendingRestore} onRestore={handleRestore} onDiscardRestore={handleDiscardRestore} />
         )}
         {page === "check" && renderCheckFlow()}
         {page === "yearend" && (
