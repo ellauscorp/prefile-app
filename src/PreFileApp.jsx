@@ -3677,9 +3677,9 @@ export default function PreFileApp() {
     //   FFFAFAFA — zebra row fill
     //   FFF0F0F0 — thin row divider
     const titleStyle = {
-      font:      { bold: true, color: { rgb: "FF1F5F2E" }, name: "Calibri", sz: 18 },
+      font:      { bold: true, color: { rgb: "FFFFFFFF" }, name: "Calibri", sz: 18 },
       alignment: { horizontal: "left", vertical: "center" },
-      fill:      { patternType: "solid", fgColor: { rgb: "FFF4FAF6" } },
+      fill:      { patternType: "solid", fgColor: { rgb: "FF1B5E20" } },
     };
     const subheaderStyle = {
       font:      { color: { rgb: "FF4A4A4A" }, name: "Calibri", sz: 11 },
