@@ -3685,9 +3685,9 @@ export default function PreFileApp() {
       alignment: { horizontal: "left", vertical: "center" },
     };
     const tableHeaderStyle = {
-      font:      { bold: true, color: { rgb: "FF1F5F2E" }, name: "Calibri", sz: 11 },
+      font:      { bold: true, color: { rgb: "FFFFFFFF" }, name: "Calibri", sz: 11 },
       alignment: { horizontal: "left", vertical: "center", wrapText: true },
-      fill:      { patternType: "solid", fgColor: { rgb: "FFEEF6F0" } },
+      fill:      { patternType: "solid", fgColor: { rgb: "FF1B5E20" } },
       border:    { bottom: { style: "thin", color: { rgb: "FFD6E8DC" } } },
     };
     const tableHeaderRightStyle = {
@@ -4194,6 +4194,10 @@ export default function PreFileApp() {
     // read before the 'Downloaded ✓' callout takes over. The file itself is
     // already downloading by this point — only the visual confirmation lags.
     setTimeout(() => setShowDownloadMsg(true), 800);
+    // Revert to default button label after the success state has had time to be
+    // seen. Button was already mechanically re-clickable (disabled only checks
+    // isDownloading) — this restores "Download…" label so re-download is visible.
+    setTimeout(() => setShowDownloadMsg(false), 4000);
     } catch (e) {
       console.error(e);
       showToast("Something went wrong — please try downloading again.");
