@@ -1248,10 +1248,10 @@ function AddReceiptScreen({ onMethod, isMobile }) {
         <div className="pf-label">Step 1 of 3</div>
         <div className="progress-bar"><div className="progress-fill" style={{ width: "33%" }} /></div>
         <h2 style={{ fontFamily:"'Fraunces', serif", fontSize:28, fontWeight:700, color:C.ink, letterSpacing:"-0.4px", marginBottom:8 }}>
-          Add a receipt
+          Upload your tax documents here
         </h2>
         <p style={{ fontSize:14, color:C.inkLight, lineHeight:1.65 }}>
-          Upload, scan, or enter a receipt — we'll help you organize it
+          Add receipts, stock or crypto exports, spreadsheets, or PDFs
         </p>
       </div>
 
