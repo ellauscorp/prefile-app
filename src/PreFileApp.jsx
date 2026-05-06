@@ -4154,7 +4154,144 @@ export default function PreFileApp() {
     wsBiz["!rows"] = bizRowHeights;
 
     // ──────────────────────────────────────────────────────────────────────
-    // SHEET 4 — REVIEW & FLAGS
+    // SHEET 4 — SCHEDULE D PREVIEW (sample / preview only)
+    // Demonstrates the structure for capital gains / investment activity.
+    // Sample rows are illustrative; no real tax calculations are performed.
+    // ──────────────────────────────────────────────────────────────────────
+    const wsSchD = {};
+    wsSchD["A1"] = { v: "Schedule D Preview", t: "s", s: titleStyle };
+    wsSchD["A2"] = { v: "Tax Year 2025  ·  Example layout for capital gains, losses, and investment activity", t: "s", s: subheaderStyle };
+    wsSchD["A3"] = { v: "Sample structure — no real investment data is calculated.", t: "s", s: bylineStyle };
+
+    const SCHD_HDR_ROW = 5;
+    const schdHeaders = ["Description / Asset", "Date acquired", "Date sold", "Proceeds", "Cost basis", "Gain / Loss", "Term"];
+    const schdHeaderCols = ["A", "B", "C", "D", "E", "F", "G"];
+    schdHeaders.forEach((h, i) => {
+      // Right-align the numeric column headers (Proceeds, Cost basis, Gain/Loss)
+      const isNum = i === 3 || i === 4 || i === 5;
+      wsSchD[schdHeaderCols[i] + SCHD_HDR_ROW] = { v: h, t: "s", s: isNum ? tableHeaderRightStyle : tableHeaderStyle };
+    });
+
+    const schdSampleRows = [
+      ["Acme Corp common stock (50 sh)", "Mar 12, 2023", "Aug 4, 2025",  4250.00, 3100.00, 1150.00, "Long-term"],
+      ["Index ETF (VTI, 10 sh)",          "Jun 5, 2024",  "Nov 18, 2025", 2480.00, 2310.00,  170.00, "Short-term"],
+      ["Bitcoin (0.05 BTC)",              "Jan 22, 2024", "Sep 30, 2025", 3120.00, 2050.00, 1070.00, "Short-term"],
+    ];
+    schdSampleRows.forEach((row, rIdx) => {
+      const r = SCHD_HDR_ROW + 1 + rIdx;
+      const isOdd = rIdx % 2 === 1;
+      const textStyle  = isOdd ? dataRowOddStyle    : dataRowEvenStyle;
+      const numStyle   = isOdd ? dataAmountOddStyle : dataAmountEvenStyle;
+      // Description (A) + dates (B, C) — text style, left aligned
+      wsSchD["A" + r] = { v: row[0], t: "s", s: textStyle };
+      wsSchD["B" + r] = { v: row[1], t: "s", s: textStyle };
+      wsSchD["C" + r] = { v: row[2], t: "s", s: textStyle };
+      // Numeric (D, E, F) — number type with currency formatting via style
+      wsSchD["D" + r] = { v: row[3], t: "n", z: "$#,##0.00", s: numStyle };
+      wsSchD["E" + r] = { v: row[4], t: "n", z: "$#,##0.00", s: numStyle };
+      wsSchD["F" + r] = { v: row[5], t: "n", z: "$#,##0.00", s: numStyle };
+      // Term (G) — text style, left aligned
+      wsSchD["G" + r] = { v: row[6], t: "s", s: textStyle };
+    });
+
+    // Footer note (2 rows below last sample row)
+    const schdFooterRow = SCHD_HDR_ROW + 1 + schdSampleRows.length + 1;
+    wsSchD["A" + schdFooterRow] = {
+      v: "Preview structure only — real Schedule D values require imported or entered investment data.",
+      t: "s", s: disclaimerStyle,
+    };
+
+    wsSchD["!ref"] = "A1:G" + schdFooterRow;
+    wsSchD["!cols"] = [
+      { wch: 32 }, // A: description
+      { wch: 14 }, // B: acquired
+      { wch: 14 }, // C: sold
+      { wch: 13 }, // D: proceeds
+      { wch: 13 }, // E: cost basis
+      { wch: 13 }, // F: gain/loss
+      { wch: 13 }, // G: term
+    ];
+    wsSchD["!rows"] = [
+      { hpt: 32 }, // 1: title
+      { hpt: 18 }, // 2: subheader
+      { hpt: 16 }, // 3: byline
+      { hpt: 8 },  // 4: spacer
+      { hpt: 22 }, // 5: header
+    ];
+    // Merge title across all columns
+    wsSchD["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 6 } },
+      { s: { r: schdFooterRow - 1, c: 0 }, e: { r: schdFooterRow - 1, c: 6 } },
+    ];
+    // Freeze title + headers
+    wsSchD["!freeze"] = { ySplit: 5 };
+
+    // ──────────────────────────────────────────────────────────────────────
+    // SHEET 5 — SCHEDULE 1 PREVIEW (sample / preview only)
+    // Demonstrates the structure for adjustments and additional income items
+    // that don't appear in the Schedule C expense flow. Sample rows only.
+    // ──────────────────────────────────────────────────────────────────────
+    const wsSch1 = {};
+    wsSch1["A1"] = { v: "Schedule 1 Preview", t: "s", s: titleStyle };
+    wsSch1["A2"] = { v: "Tax Year 2025  ·  Example layout for adjustments and additional income items", t: "s", s: subheaderStyle };
+    wsSch1["A3"] = { v: "Sample structure — no real adjustments are calculated.", t: "s", s: bylineStyle };
+
+    const SCH1_HDR_ROW = 5;
+    wsSch1["A" + SCH1_HDR_ROW] = { v: "Item",              t: "s", s: tableHeaderStyle };
+    wsSch1["B" + SCH1_HDR_ROW] = { v: "Category / Section", t: "s", s: tableHeaderStyle };
+    wsSch1["C" + SCH1_HDR_ROW] = { v: "Amount",             t: "s", s: tableHeaderRightStyle };
+    wsSch1["D" + SCH1_HDR_ROW] = { v: "Notes",              t: "s", s: tableHeaderStyle };
+
+    const sch1SampleRows = [
+      ["Self-employed health insurance",  "Adjustment",       6800.00, "Annual premium for self-only coverage"],
+      ["Traditional IRA contribution",    "Adjustment",       6500.00, "Within annual contribution limit"],
+      ["Student loan interest",           "Adjustment",        720.00, "Subject to phase-out by income"],
+      ["1099-INT interest income",        "Additional income",  148.00, "Interest from savings account"],
+      ["Hobby income",                    "Additional income",  340.00, "Occasional craft sales (non-business)"],
+    ];
+    sch1SampleRows.forEach((row, rIdx) => {
+      const r = SCH1_HDR_ROW + 1 + rIdx;
+      const isOdd = rIdx % 2 === 1;
+      const textStyle = isOdd ? dataRowOddStyle    : dataRowEvenStyle;
+      const numStyle  = isOdd ? dataAmountOddStyle : dataAmountEvenStyle;
+      wsSch1["A" + r] = { v: row[0], t: "s", s: textStyle };
+      wsSch1["B" + r] = { v: row[1], t: "s", s: textStyle };
+      wsSch1["C" + r] = { v: row[2], t: "n", z: "$#,##0.00", s: numStyle };
+      wsSch1["D" + r] = { v: row[3], t: "s", s: textStyle };
+    });
+
+    const sch1FooterRow = SCH1_HDR_ROW + 1 + sch1SampleRows.length + 1;
+    wsSch1["A" + sch1FooterRow] = {
+      v: "Preview structure only — real Schedule 1 values require user-entered or imported tax data.",
+      t: "s", s: disclaimerStyle,
+    };
+
+    wsSch1["!ref"] = "A1:D" + sch1FooterRow;
+    wsSch1["!cols"] = [
+      { wch: 36 }, // A: item
+      { wch: 22 }, // B: category/section
+      { wch: 13 }, // C: amount
+      { wch: 44 }, // D: notes
+    ];
+    wsSch1["!rows"] = [
+      { hpt: 32 }, // 1: title
+      { hpt: 18 }, // 2: subheader
+      { hpt: 16 }, // 3: byline
+      { hpt: 8 },  // 4: spacer
+      { hpt: 22 }, // 5: header
+    ];
+    wsSch1["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 3 } },
+      { s: { r: sch1FooterRow - 1, c: 0 }, e: { r: sch1FooterRow - 1, c: 3 } },
+    ];
+    wsSch1["!freeze"] = { ySplit: 5 };
+
+    // ──────────────────────────────────────────────────────────────────────
+    // SHEET 6 — REVIEW & FLAGS
     // Issues / actions surfaced from computeInsights() output, presented
     // as a structured table (Issue / Explanation / Action) instead of the
     // prose paragraphs the previous Summary sheet used. Easier to scan,
@@ -4380,6 +4517,8 @@ export default function PreFileApp() {
     XLSX.utils.book_append_sheet(wb, wsMaster,        "Master Summary");
     XLSX.utils.book_append_sheet(wb, wsSchC,          "Schedule C Expenses");
     XLSX.utils.book_append_sheet(wb, wsBiz,           "Business Expenses");
+    XLSX.utils.book_append_sheet(wb, wsSchD,          "Schedule D Preview");
+    XLSX.utils.book_append_sheet(wb, wsSch1,          "Schedule 1 Preview");
     XLSX.utils.book_append_sheet(wb, wsReview,        "Review & Flags");
     XLSX.writeFile(wb, "PreFile_Organizer_2025.xlsx");
     logEvent("EXPORT_COMPLETED", { count: receipts.length, userType: getUserType(receipts) });
