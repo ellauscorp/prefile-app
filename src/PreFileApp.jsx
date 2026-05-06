@@ -154,6 +154,8 @@ const ICON_PATHS = {
   download:       ["M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4", "M7 10l5 5 5-5", "M12 15V3"],
   // Check / check-reveal
   checkCircle:    ["M22 11.08V12a10 10 0 11-5.93-9.14", "M22 4L12 14.01l-3-3"],
+  // Directional
+  chevronDown:    ["M6 9l6 6 6-6"],
 };
 
 // Convenience component — picks path by name
@@ -2931,16 +2933,21 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                     border: "1px solid rgba(230,184,0,0.35)",
                     borderLeft: "3px solid #E6B800",
                     borderRadius: 10, lineHeight: 1.5,
-                    display: "flex", alignItems: "flex-start", gap: 10,
+                    display: "flex", flexDirection: "column", gap: 6,
                   }}>
-                    <Icon name="zap" size={14} color="#E6B800" strokeWidth={2.2} style={{ marginTop: 3, flexShrink: 0 }} />
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 1 }}>
-                        Your receipts aren't saved yet.
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                      <Icon name="zap" size={14} color="#E6B800" strokeWidth={2.2} style={{ marginTop: 3, flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 1 }}>
+                          Your receipts aren't saved yet.
+                        </div>
+                        <div style={{ fontSize: 12, color: C.inkLight }}>
+                          Save them first to unlock your download below.
+                        </div>
                       </div>
-                      <div style={{ fontSize: 12, color: C.inkLight }}>
-                        Save them first to unlock your download.
-                      </div>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "center", marginTop: -2 }}>
+                      <Icon name="chevronDown" size={14} color="#E6B800" strokeWidth={2} />
                     </div>
                   </div>
                 )}
