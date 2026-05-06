@@ -2949,12 +2949,26 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                 <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
                   Start free — only pay if you download
                 </div>
-                <div style={{ marginTop: 8, fontSize: 11, color: C.inkFaint, textAlign: "center" }}>
-                  {isSaved
-                    ? "Your receipts are saved · Export ready"
-                    : "Your receipts are not saved yet — use the button below to download your file."
-                  }
-                </div>
+                {isSaved ? (
+                  <div style={{ marginTop: 8, fontSize: 11, color: C.inkFaint, textAlign: "center" }}>
+                    Your receipts are saved · Export ready
+                  </div>
+                ) : (
+                  <div style={{
+                    marginTop: 10, padding: "10px 14px",
+                    background: "#FFFAF0",
+                    border: "1px solid rgba(230,184,0,0.35)",
+                    borderLeft: "3px solid #E6B800",
+                    borderRadius: 10, lineHeight: 1.5,
+                  }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 2 }}>
+                      Your receipts aren't saved yet.
+                    </div>
+                    <div style={{ fontSize: 12, color: C.inkLight }}>
+                      Use the button below to save and unlock your download.
+                    </div>
+                  </div>
+                )}
                 {isSaved && !showDownloadMsg && (
                   <div style={{
                     marginTop: 10, padding: "10px 14px",
