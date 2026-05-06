@@ -2926,7 +2926,16 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
                 )}
                 <button
                   className="pf-btn-primary"
-                  onClick={() => { const userType = getUserType(receipts); logEvent("PAYWALL_VIEWED", { count: receipts.length, userType }); logEvent("PAYWALL_SHOWN", { count: receipts.length, userType }); setShowPaywall(true); }}
+                  onClick={() => {
+                    if (isSaved) {
+                      onExport();
+                    } else {
+                      const userType = getUserType(receipts);
+                      logEvent("PAYWALL_VIEWED", { count: receipts.length, userType });
+                      logEvent("PAYWALL_SHOWN", { count: receipts.length, userType });
+                      setShowPaywall(true);
+                    }
+                  }}
                   disabled={isDownloading || (receipts.length > 0 && !confirmed)}
                   style={{
                     width: "100%", fontSize: 14, padding: "13px",
