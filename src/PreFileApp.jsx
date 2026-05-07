@@ -3509,12 +3509,12 @@ function SchedDScreen({ items, onAdd, onDelete, onBack }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
               <div className="pf-label">Date acquired</div>
-              <input className="pf-input" placeholder="Mar 12, 2023" value={form.dateAcquired} onChange={e => updateField("dateAcquired", e.target.value)} />
+              <input className="pf-input" type="date" value={form.dateAcquired} onChange={e => updateField("dateAcquired", e.target.value)} />
               <ErrorText msg={errors.dateAcquired} />
             </div>
             <div>
               <div className="pf-label">Date sold</div>
-              <input className="pf-input" placeholder="Aug 4, 2025" value={form.dateSold} onChange={e => updateField("dateSold", e.target.value)} />
+              <input className="pf-input" type="date" value={form.dateSold} onChange={e => updateField("dateSold", e.target.value)} />
               <ErrorText msg={errors.dateSold} />
             </div>
           </div>
@@ -3948,7 +3948,6 @@ export default function PreFileApp() {
   const [checkStep, setCheckStep]   = useState("questions"); // questions | loading | reveal
   const [checkAnswers, setCheckAnswers] = useState(null);
   const [method, setMethod]         = useState(null);
-  const [entryOrigin, setEntryOrigin] = useState("flow"); // flow | organizer
   const [pendingReceipt, setPendingReceipt] = useState(null);
   const [receipts, setReceipts]     = useState([]);
   // ── Schedule D / Schedule 1 manual-entry state ──
