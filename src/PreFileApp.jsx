@@ -1418,28 +1418,57 @@ function Homepage({ onStart, onCheck }) {
 // step: "add" | "processing" | "confirm" | "edit" | "list"
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// STEP 1 — ADD RECEIPT
+// STEP 1 — CHOOSE WHAT TO ADD
 function AddReceiptScreen({ onMethod, isMobile }) {
+  const options = [
+    {
+      id: "schedule-c",
+      title: "Business expense",
+      subtitle: "Schedule C · Merchant, amount, date, and category",
+      icon: "🧾",
+    },
+    {
+      id: "schedule-d",
+      title: "Investment sale",
+      subtitle: "Schedule D · Asset, dates, proceeds, and cost basis",
+      icon: "📈",
+    },
+    {
+      id: "schedule-1",
+      title: "Adjustment or additional income",
+      subtitle: "Schedule 1 · Item type, amount, and notes",
+      icon: "🗂️",
+    },
+  ];
+
   return (
-    <div className="slide-up" style={{ maxWidth: 520, margin: "0 auto", padding: "40px 24px" }}>
+    <div className="slide-up" style={{ maxWidth: 560, margin: "0 auto", padding: "40px 24px" }}>
       <div style={{ marginBottom: 28 }}>
-        <div className="pf-label">Step 1 of 3</div>
-        <div className="progress-bar"><div className="progress-fill" style={{ width: "33%" }} /></div>
+        <div className="pf-label">Choose what to add</div>
         <h2 style={{ fontFamily:"'Fraunces', serif", fontSize:28, fontWeight:700, color:C.ink, letterSpacing:"-0.4px", marginBottom:8 }}>
           Build your tax file
         </h2>
         <p style={{ fontSize:14, color:C.inkLight, lineHeight:1.65 }}>
-          Enter your expense details as you go, so tax season is easier later.
+          Pick the kind of item you want to add, then we’ll take you to the right form.
         </p>
       </div>
 
-      <button className="method-card" onClick={() => onMethod("manual")} style={{ width:"100%", flexDirection:"row", justifyContent:"flex-start", padding:"16px 20px", gap:14 }}>
-        <span style={{ fontSize:24 }}>✏️</span>
-        <div style={{ textAlign:"left" }}>
-          <div style={{ fontSize:14, fontWeight:600, color:C.ink }}>Enter manually</div>
-          <div style={{ fontSize:12, color:C.inkFaint }}>Type in merchant, amount, date</div>
-        </div>
-      </button>
+      <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+        {options.map(option => (
+          <button
+            key={option.id}
+            className="method-card"
+            onClick={() => onMethod(option.id)}
+            style={{ width:"100%", flexDirection:"row", justifyContent:"flex-start", padding:"16px 20px", gap:14 }}
+          >
+            <span style={{ fontSize:24 }}>{option.icon}</span>
+            <div style={{ textAlign:"left" }}>
+              <div style={{ fontSize:14, fontWeight:600, color:C.ink }}>{option.title}</div>
+              <div style={{ fontSize:12, color:C.inkFaint }}>{option.subtitle}</div>
+            </div>
+          </button>
+        ))}
+      </div>
 
       <div style={{ marginTop:20, fontSize:11, color:C.inkFaint, textAlign:"center" }}>
         You decide what is deductible · PreFile prepares the data — not tax advice
@@ -1471,7 +1500,7 @@ function ProcessingScreen({ method, onExtracted, receipts = [] }) {
       <div style={{ marginBottom:24 }}>
         <div className="pf-label">Step 2 of 3</div>
         <div className="progress-bar"><div className="progress-fill" style={{ width:"66%" }} /></div>
-        <h2 style={{ fontFamily:"'Fraunces', serif", fontSize:26, fontWeight:700, color:C.ink, letterSpacing:"-0.3px", marginBottom:6 }}>Enter receipt details</h2>
+        <h2 style={{ fontFamily:"'Fraunces', serif", fontSize:26, fontWeight:700, color:C.ink, letterSpacing:"-0.3px", marginBottom:6 }}>Enter business expense details</h2>
         <p style={{ fontSize:13, color:C.inkLight }}>Fill in what you know — we'll suggest a category for you to review</p>
       </div>
 
@@ -4044,7 +4073,23 @@ export default function PreFileApp() {
   };
 
   // ── Receipt flow handlers ──
-  const handleMethod = m => { setMethod(m); setReceiptStep("processing"); };
+  const handleMethod = m => {
+    if (m === "schedule-c" || m === "manual") {
+      setMethod("manual");
+      setReceiptStep("processing");
+      setPage("receipt-flow");
+      return;
+    }
+    if (m === "schedule-d") {
+      setEntryOrigin("flow");
+      setPage("schedule-d");
+      return;
+    }
+    if (m === "schedule-1") {
+      setEntryOrigin("flow");
+      setPage("schedule-1");
+    }
+  };
   const handleExtracted = r => { setPendingReceipt(r); setReceiptStep("confirm"); };
   const handleConfirm = () => {
     setReceipts(r => [...r, pendingReceipt]);
@@ -4055,7 +4100,7 @@ export default function PreFileApp() {
   };
   const handleEdit      = () => setReceiptStep("edit");
   const handleSaveEdit  = u => { setPendingReceipt(u); setReceiptStep("confirm"); };
-  const handleAddAnother = () => { setPage("receipt-flow"); setReceiptStep("add"); };
+  const handleAddAnother = () => { setEntryOrigin("flow"); setPage("receipt-flow"); setReceiptStep("add"); };
   const handleDeleteReceipt = (id) => {
     setReceipts(prev => prev.filter(r => r.id !== id));
   };
@@ -5105,7 +5150,7 @@ export default function PreFileApp() {
   const handleCheckStart   = () => { setPage("check"); setCheckStep("questions"); };
   const handleQuestionsEnd = a => { setCheckAnswers(a); setCheckStep("loading"); };
   const handleLoadingEnd   = () => setCheckStep("reveal");
-  const handleRevealContinue = () => { setPage("receipt-flow"); setReceiptStep("add"); };
+  const handleRevealContinue = () => { setEntryOrigin("flow"); setPage("receipt-flow"); setReceiptStep("add"); };
 
   const renderCheckFlow = () => {
     switch (checkStep) {
@@ -5126,26 +5171,26 @@ export default function PreFileApp() {
       `}</style>
 
       <Nav
-        onLogoClick={() => { setPage("home"); setReceiptStep("add"); setCheckStep("questions"); setShowPaywall(false); }}
+        onLogoClick={() => { setPage("home"); setReceiptStep("add"); setCheckStep("questions"); setShowPaywall(false); setEntryOrigin("flow"); }}
         receiptCount={receipts.length}
       />
 
       <main style={{ minHeight: "calc(100vh - 65px)", background: C.cream }}>
         {page === "home" && (
           <Homepage
-            onStart={() => setPage("receipt-flow")}
+            onStart={() => { setEntryOrigin("flow"); setReceiptStep("add"); setPage("receipt-flow"); }}
             onCheck={handleCheckStart}
           />
         )}
         {page === "receipt-flow" && renderReceiptFlow()}
         {page === "organizer" && (
-          <OrganizerScreen receipts={receipts} onAddAnother={handleAddAnother} isSaved={isSaved} onExport={handleExport} showSavedConfirm={showSavedConfirm} onGenerateSummary={handleGenerateSummary} onClearData={handleClearData} onDeleteReceipt={handleDeleteReceipt} showDownloadMsg={showDownloadMsg} isDownloading={isDownloading} pendingRestore={pendingRestore} onRestore={handleRestore} onDiscardRestore={handleDiscardRestore} schedDItems={schedDItems} sched1Items={sched1Items} onOpenSchedD={() => setPage("schedule-d")} onOpenSched1={() => setPage("schedule-1")} />
+          <OrganizerScreen receipts={receipts} onAddAnother={handleAddAnother} isSaved={isSaved} onExport={handleExport} showSavedConfirm={showSavedConfirm} onGenerateSummary={handleGenerateSummary} onClearData={handleClearData} onDeleteReceipt={handleDeleteReceipt} showDownloadMsg={showDownloadMsg} isDownloading={isDownloading} pendingRestore={pendingRestore} onRestore={handleRestore} onDiscardRestore={handleDiscardRestore} schedDItems={schedDItems} sched1Items={sched1Items} onOpenSchedD={() => { setEntryOrigin("organizer"); setPage("schedule-d"); }} onOpenSched1={() => { setEntryOrigin("organizer"); setPage("schedule-1"); }} />
         )}
         {page === "schedule-d" && (
-          <SchedDScreen items={schedDItems} onAdd={handleAddSchedD} onDelete={handleDeleteSchedD} onBack={() => setPage("organizer")} />
+          <SchedDScreen items={schedDItems} onAdd={handleAddSchedD} onDelete={handleDeleteSchedD} onBack={() => setPage(entryOrigin === "organizer" ? "organizer" : "receipt-flow")} />
         )}
         {page === "schedule-1" && (
-          <Sched1Screen items={sched1Items} onAdd={handleAddSched1} onDelete={handleDeleteSched1} onBack={() => setPage("organizer")} />
+          <Sched1Screen items={sched1Items} onAdd={handleAddSched1} onDelete={handleDeleteSched1} onBack={() => setPage(entryOrigin === "organizer" ? "organizer" : "receipt-flow")} />
         )}
         {page === "check" && renderCheckFlow()}
         {page === "yearend" && (
