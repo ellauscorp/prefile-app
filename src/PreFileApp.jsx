@@ -388,6 +388,150 @@ function computeSchedDTerm(dateAcquired, dateSold) {
   return s > oneYearLater ? "Long-term" : "Short-term";
 }
 
+// ── Schedule D IRS reference ──
+// Organizer-level IRS mapping foundation only — not completed filing logic.
+// Real IRS Schedule D structure separates Part I (short-term, held ≤1 year)
+// and Part II (long-term, held >1 year). This app currently maps at the
+// part level only so a tax professional can see the intended routing context
+// without implying full form-completion behavior.
+//
+// Year-sensitive note: the Part I / Part II structure is stable, but any
+// future deeper routing should still be rechecked against the current IRS
+// Schedule D instructions for TAX_YEAR.
+//
+// Extension point: if future 1099-B box-level or basis-reporting routing is
+// needed, add a separate detailed reference structure (for example,
+// SCHEDULE_D_DETAIL_REFERENCE) rather than overloading this term-based map.
+// Do NOT change the stored schedDItems shape just to force more detailed IRS
+// routing into this organizer-level structure.
+const SCHEDULE_D_REFERENCE = {
+  "Short-term": {
+    part: "Part I",
+    label: "Short-term capital gains and losses",
+    description: "Assets held one year or less",
+    summaryLine: "Line 7",
+  },
+  "Long-term": {
+    part: "Part II",
+    label: "Long-term capital gains and losses",
+    description: "Assets held more than one year",
+    summaryLine: "Line 15",
+  },
+};
+
+// Resolve a Schedule D entry to its IRS-section reference. Returns null if
+// the term cannot be inferred (missing/invalid dates).
+function getSchedDReference(entry) {
+  const term = computeSchedDTerm(entry && entry.dateAcquired, entry && entry.dateSold);
+  return SCHEDULE_D_REFERENCE[term] || null;
+}
+
+// ── Schedule 1 IRS reference ──
+// Organizer-level IRS mapping foundation only — not completed filing logic.
+// Real Schedule 1 (Form 1040) structure separates Part I (additional income)
+// and Part II (adjustments to income). Each user-facing item type below is
+// mapped to its current organizer-level IRS line reference for cleaner
+// tax-professional handoff.
+//
+// Year-sensitive note: these line references were validated against the
+// current implemented IRS structure for this phase. If the IRS renumbers
+// Schedule 1 lines in a future tax year, update this map here rather than
+// scattering line strings throughout the app.
+//
+// Extension point: if new Schedule 1 item types are added later, they must be
+// added to this mapping structure too, and their current-year IRS line
+// references should be verified before shipping.
+const SCHEDULE_1_REFERENCE = {
+  "Self-employed health insurance": {
+    part: "Part II",
+    section: "Adjustments to income",
+    line: "Line 17",
+  },
+  "IRA contribution": {
+    part: "Part II",
+    section: "Adjustments to income",
+    line: "Line 20",
+  },
+  "Student loan interest": {
+    part: "Part II",
+    section: "Adjustments to income",
+    line: "Line 21",
+  },
+  "Additional income": {
+    part: "Part I",
+    section: "Additional income",
+    line: "Line 8z",
+  },
+  "Other adjustment": {
+    part: "Part II",
+    section: "Adjustments to income",
+    line: "Line 24z",
+  },
+};
+
+// Resolve a Schedule 1 item type to its IRS reference. Falls back to a
+// neutral "review with tax professional" reference for unknown types.
+function getSched1Reference(itemType) {
+  return SCHEDULE_1_REFERENCE[itemType] || {
+    part: "—",
+    section: "Review with tax professional",
+    line: "—",
+  };
+}
+
+// ── Validators ──
+// Foundation-level validation. Returns { valid: bool, errors: { field: msg } }
+// where each errors entry is suitable for inline display next to the field.
+
+function validateSchedDEntry(form) {
+  const errors = {};
+  if (!form.asset || !form.asset.trim()) {
+    errors.asset = "Add an asset description to continue.";
+  }
+  if (!form.dateAcquired) {
+    errors.dateAcquired = "Enter the purchase date to continue.";
+  }
+  if (!form.dateSold) {
+    errors.dateSold = "Enter the sale date to continue.";
+  }
+  // Date-order check (only if both parse cleanly)
+  if (form.dateAcquired && form.dateSold) {
+    const a = new Date(form.dateAcquired);
+    const s = new Date(form.dateSold);
+    if (!isNaN(a.getTime()) && !isNaN(s.getTime()) && s < a) {
+      errors.dateSold = "Check the dates. The sale date can’t be earlier than the purchase date.";
+    }
+  }
+  // Numeric checks — empty/non-numeric/negative all flag
+  const proceeds = parseFloat(form.proceeds);
+  if (form.proceeds === "" || form.proceeds === undefined || form.proceeds === null) {
+    errors.proceeds = "Enter the proceeds amount to continue.";
+  } else if (isNaN(proceeds) || proceeds < 0) {
+    errors.proceeds = "Enter a non-negative number. No commas needed.";
+  }
+  const basis = parseFloat(form.costBasis);
+  if (form.costBasis === "" || form.costBasis === undefined || form.costBasis === null) {
+    errors.costBasis = "Enter the cost basis to continue.";
+  } else if (isNaN(basis) || basis < 0) {
+    errors.costBasis = "Enter a non-negative number. No commas needed.";
+  }
+  return { valid: Object.keys(errors).length === 0, errors };
+}
+
+function validateSched1Entry(form) {
+  const errors = {};
+  if (!form.itemType || !form.itemType.trim()) {
+    errors.itemType = "Choose an item type to continue.";
+  }
+  const amount = parseFloat(form.amount);
+  if (form.amount === "" || form.amount === undefined || form.amount === null) {
+    errors.amount = "Enter the amount to continue.";
+  } else if (isNaN(amount) || amount < 0) {
+    errors.amount = "Enter a non-negative number. No commas needed.";
+  }
+  return { valid: Object.keys(errors).length === 0, errors };
+}
+
 const SAMPLE_MERCHANTS = [
   { merchant: "Canva Pro — monthly plan",      amount: "12.99", date: "Apr 18, 2026", category: "Software & subscriptions" },
   { merchant: "USPS — label purchase",          amount: "18.45", date: "Apr 15, 2026", category: "Supplies" },
@@ -3245,12 +3389,16 @@ const CHECK_ITEMS = [
 // ═══════════════════════════════════════════════════════════════════════════════
 function SchedDScreen({ items, onAdd, onDelete, onBack }) {
   const [form, setForm] = useState({ asset: "", dateAcquired: "", dateSold: "", proceeds: "", costBasis: "", notes: "" });
-  const canSubmit = form.asset && form.dateAcquired && form.dateSold && form.proceeds && form.costBasis;
+  const [errors, setErrors] = useState({});
 
   const handleSubmit = () => {
-    if (!canSubmit) return;
+    const result = validateSchedDEntry(form);
+    if (!result.valid) {
+      setErrors(result.errors);
+      return;
+    }
     onAdd({
-      asset: form.asset,
+      asset: form.asset.trim(),
       dateAcquired: form.dateAcquired,
       dateSold: form.dateSold,
       proceeds: parseFloat(form.proceeds) || 0,
@@ -3258,7 +3406,19 @@ function SchedDScreen({ items, onAdd, onDelete, onBack }) {
       notes: form.notes || "",
     });
     setForm({ asset: "", dateAcquired: "", dateSold: "", proceeds: "", costBasis: "", notes: "" });
+    setErrors({});
   };
+
+  // Field updater that clears that field's error on change
+  const updateField = (field, value) => {
+    setForm(f => ({ ...f, [field]: value }));
+    if (errors[field]) setErrors(e => { const next = { ...e }; delete next[field]; return next; });
+  };
+
+  // Small helper for inline error text
+  const ErrorText = ({ msg }) => msg ? (
+    <div style={{ fontSize: 11, color: "#B91C1C", marginTop: 4 }}>{msg}</div>
+  ) : null;
 
   return (
     <div className="slide-up" style={{ maxWidth: 640, margin: "0 auto", padding: "40px 24px" }}>
@@ -3283,13 +3443,14 @@ function SchedDScreen({ items, onAdd, onDelete, onBack }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {items.map(it => {
               const term = computeSchedDTerm(it.dateAcquired, it.dateSold);
+              const ref  = getSchedDReference(it);
               const gain = (it.proceeds || 0) - (it.costBasis || 0);
               return (
                 <div key={it.id} style={{ background: C.white, borderRadius: 10, padding: "12px 14px", border: `1px solid ${C.creamDeep}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 2 }}>{it.asset}</div>
                     <div style={{ fontSize: 11, color: C.inkFaint }}>
-                      {it.dateAcquired} → {it.dateSold} · {term || "—"} · {gain >= 0 ? "+" : ""}${gain.toFixed(2)}
+                      {it.dateAcquired} → {it.dateSold} · {term || "—"}{ref ? ` · ${ref.part}` : ""} · {gain >= 0 ? "+" : ""}${gain.toFixed(2)}
                     </div>
                   </div>
                   <button onClick={() => onDelete(it.id)} style={{ background: "none", border: "none", color: C.inkFaint, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>
@@ -3305,36 +3466,46 @@ function SchedDScreen({ items, onAdd, onDelete, onBack }) {
       {/* Entry form */}
       <div style={{ background: C.white, borderRadius: 12, padding: 20, border: `1px solid ${C.creamDeep}` }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 14 }}>Add a transaction</div>
+        {Object.keys(errors).length > 0 && (
+          <div style={{ fontSize: 12, color: C.inkLight, marginBottom: 12 }}>
+            Fix the highlighted fields, then try saving again.
+          </div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <div className="pf-label">Asset / description</div>
-            <input className="pf-input" placeholder="e.g. Acme Corp common stock (50 sh)" value={form.asset} onChange={e => setForm(f => ({ ...f, asset: e.target.value }))} />
+            <input className="pf-input" placeholder="e.g. Acme Corp common stock (50 sh)" value={form.asset} onChange={e => updateField("asset", e.target.value)} />
+            <ErrorText msg={errors.asset} />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
               <div className="pf-label">Date acquired</div>
-              <input className="pf-input" placeholder="Mar 12, 2023" value={form.dateAcquired} onChange={e => setForm(f => ({ ...f, dateAcquired: e.target.value }))} />
+              <input className="pf-input" placeholder="Mar 12, 2023" value={form.dateAcquired} onChange={e => updateField("dateAcquired", e.target.value)} />
+              <ErrorText msg={errors.dateAcquired} />
             </div>
             <div>
               <div className="pf-label">Date sold</div>
-              <input className="pf-input" placeholder="Aug 4, 2025" value={form.dateSold} onChange={e => setForm(f => ({ ...f, dateSold: e.target.value }))} />
+              <input className="pf-input" placeholder="Aug 4, 2025" value={form.dateSold} onChange={e => updateField("dateSold", e.target.value)} />
+              <ErrorText msg={errors.dateSold} />
             </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
               <div className="pf-label">Proceeds</div>
-              <input className="pf-input" type="number" placeholder="4250.00" value={form.proceeds} onChange={e => setForm(f => ({ ...f, proceeds: e.target.value }))} />
+              <input className="pf-input" type="number" placeholder="4250.00" value={form.proceeds} onChange={e => updateField("proceeds", e.target.value)} />
+              <ErrorText msg={errors.proceeds} />
             </div>
             <div>
               <div className="pf-label">Cost basis</div>
-              <input className="pf-input" type="number" placeholder="3100.00" value={form.costBasis} onChange={e => setForm(f => ({ ...f, costBasis: e.target.value }))} />
+              <input className="pf-input" type="number" placeholder="3100.00" value={form.costBasis} onChange={e => updateField("costBasis", e.target.value)} />
+              <ErrorText msg={errors.costBasis} />
             </div>
           </div>
           <div>
             <div className="pf-label">Notes (optional)</div>
-            <input className="pf-input" placeholder="Any context for your tax professional" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+            <input className="pf-input" placeholder="Any context for your tax professional" value={form.notes} onChange={e => updateField("notes", e.target.value)} />
           </div>
-          <button className="pf-btn-primary" onClick={handleSubmit} disabled={!canSubmit} style={{ opacity: canSubmit ? 1 : 0.4, cursor: canSubmit ? "pointer" : "not-allowed" }}>
+          <button className="pf-btn-primary" onClick={handleSubmit}>
             Add transaction →
           </button>
         </div>
@@ -3354,17 +3525,31 @@ function SchedDScreen({ items, onAdd, onDelete, onBack }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 function Sched1Screen({ items, onAdd, onDelete, onBack }) {
   const [form, setForm] = useState({ itemType: SCHED_1_ITEM_TYPES[0], amount: "", notes: "" });
-  const canSubmit = form.itemType && form.amount;
+  const [errors, setErrors] = useState({});
 
   const handleSubmit = () => {
-    if (!canSubmit) return;
+    const result = validateSched1Entry(form);
+    if (!result.valid) {
+      setErrors(result.errors);
+      return;
+    }
     onAdd({
       itemType: form.itemType,
       amount: parseFloat(form.amount) || 0,
       notes: form.notes || "",
     });
     setForm({ itemType: SCHED_1_ITEM_TYPES[0], amount: "", notes: "" });
+    setErrors({});
   };
+
+  const updateField = (field, value) => {
+    setForm(f => ({ ...f, [field]: value }));
+    if (errors[field]) setErrors(e => { const next = { ...e }; delete next[field]; return next; });
+  };
+
+  const ErrorText = ({ msg }) => msg ? (
+    <div style={{ fontSize: 11, color: "#B91C1C", marginTop: 4 }}>{msg}</div>
+  ) : null;
 
   return (
     <div className="slide-up" style={{ maxWidth: 640, margin: "0 auto", padding: "40px 24px" }}>
@@ -3387,19 +3572,22 @@ function Sched1Screen({ items, onAdd, onDelete, onBack }) {
         <div style={{ marginBottom: 28 }}>
           <div className="pf-label" style={{ marginBottom: 8 }}>Your entries ({items.length})</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {items.map(it => (
-              <div key={it.id} style={{ background: C.white, borderRadius: 10, padding: "12px 14px", border: `1px solid ${C.creamDeep}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 2 }}>{it.itemType}</div>
-                  <div style={{ fontSize: 11, color: C.inkFaint }}>
-                    ${(it.amount || 0).toFixed(2)}{it.notes ? ` · ${it.notes}` : ""}
+            {items.map(it => {
+              const ref = getSched1Reference(it.itemType);
+              return (
+                <div key={it.id} style={{ background: C.white, borderRadius: 10, padding: "12px 14px", border: `1px solid ${C.creamDeep}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 2 }}>{it.itemType}</div>
+                    <div style={{ fontSize: 11, color: C.inkFaint }}>
+                      ${(it.amount || 0).toFixed(2)} · {ref.part} · {ref.line}{it.notes ? ` · ${it.notes}` : ""}
+                    </div>
                   </div>
+                  <button onClick={() => onDelete(it.id)} style={{ background: "none", border: "none", color: C.inkFaint, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>
+                    Delete
+                  </button>
                 </div>
-                <button onClick={() => onDelete(it.id)} style={{ background: "none", border: "none", color: C.inkFaint, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>
-                  Delete
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -3407,22 +3595,29 @@ function Sched1Screen({ items, onAdd, onDelete, onBack }) {
       {/* Entry form */}
       <div style={{ background: C.white, borderRadius: 12, padding: 20, border: `1px solid ${C.creamDeep}` }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 14 }}>Add an item</div>
+        {Object.keys(errors).length > 0 && (
+          <div style={{ fontSize: 12, color: C.inkLight, marginBottom: 12 }}>
+            Fix the highlighted fields, then try saving again.
+          </div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <div className="pf-label">Item type</div>
-            <select className="pf-input" value={form.itemType} onChange={e => setForm(f => ({ ...f, itemType: e.target.value }))}>
+            <select className="pf-input" value={form.itemType} onChange={e => updateField("itemType", e.target.value)}>
               {SCHED_1_ITEM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
+            <ErrorText msg={errors.itemType} />
           </div>
           <div>
             <div className="pf-label">Amount</div>
-            <input className="pf-input" type="number" placeholder="6800.00" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
+            <input className="pf-input" type="number" placeholder="6800.00" value={form.amount} onChange={e => updateField("amount", e.target.value)} />
+            <ErrorText msg={errors.amount} />
           </div>
           <div>
             <div className="pf-label">Notes (optional)</div>
-            <input className="pf-input" placeholder="Any context for your tax professional" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+            <input className="pf-input" placeholder="Any context for your tax professional" value={form.notes} onChange={e => updateField("notes", e.target.value)} />
           </div>
-          <button className="pf-btn-primary" onClick={handleSubmit} disabled={!canSubmit} style={{ opacity: canSubmit ? 1 : 0.4, cursor: canSubmit ? "pointer" : "not-allowed" }}>
+          <button className="pf-btn-primary" onClick={handleSubmit}>
             Add item →
           </button>
         </div>
@@ -4464,18 +4659,22 @@ export default function PreFileApp() {
     });
 
     const schdSampleRows = [
-      ["Acme Corp common stock (50 sh)", "Mar 12, 2023", "Aug 4, 2025",  4250.00, 3100.00, 1150.00, "Long-term"],
-      ["Index ETF (VTI, 10 sh)",          "Jun 5, 2024",  "Nov 18, 2025", 2480.00, 2310.00,  170.00, "Short-term"],
-      ["Bitcoin (0.05 BTC)",              "Jan 22, 2024", "Sep 30, 2025", 3120.00, 2050.00, 1070.00, "Short-term"],
+      ["Acme Corp common stock (50 sh)", "Mar 12, 2023", "Aug 4, 2025",  4250.00, 3100.00, 1150.00, "Long-term · Part II"],
+      ["Index ETF (VTI, 10 sh)",          "Jun 5, 2024",  "Nov 18, 2025", 2480.00, 2310.00,  170.00, "Long-term · Part II"],
+      ["Bitcoin (0.05 BTC)",              "Jan 22, 2024", "Sep 30, 2025", 3120.00, 2050.00, 1070.00, "Long-term · Part II"],
     ];
-    // Source rows: real entries if any, sample rows otherwise
+    // Source rows: real entries if any, sample rows otherwise.
+    // Term column for real entries reads "Long-term · Part II" / "Short-term · Part I"
+    // so tax-professional handoff includes the IRS routing context inline.
     const schdRowsToRender = schdHasUserData
       ? schedDItems.map(it => {
           const proceeds = parseFloat(it.proceeds) || 0;
           const basis    = parseFloat(it.costBasis) || 0;
           const gain     = proceeds - basis;
-          const term     = computeSchedDTerm(it.dateAcquired, it.dateSold) || "—";
-          return [it.asset, it.dateAcquired, it.dateSold, proceeds, basis, gain, term];
+          const term     = computeSchedDTerm(it.dateAcquired, it.dateSold);
+          const ref      = SCHEDULE_D_REFERENCE[term];
+          const termCell = term ? (ref ? `${term} · ${ref.part}` : term) : "—";
+          return [it.asset, it.dateAcquired, it.dateSold, proceeds, basis, gain, termCell];
         })
       : schdSampleRows;
     schdRowsToRender.forEach((row, rIdx) => {
@@ -4559,16 +4758,24 @@ export default function PreFileApp() {
     wsSch1["D" + SCH1_HDR_ROW] = { v: "Notes",              t: "s", s: tableHeaderStyle };
 
     const sch1SampleRows = [
-      ["Self-employed health insurance",  "Adjustment",       6800.00, "Annual premium for self-only coverage"],
-      ["Traditional IRA contribution",    "Adjustment",       6500.00, "Within annual contribution limit"],
-      ["Student loan interest",           "Adjustment",        720.00, "Subject to phase-out by income"],
-      ["1099-INT interest income",        "Additional income",  148.00, "Interest from savings account"],
-      ["Hobby income",                    "Additional income",  340.00, "Occasional craft sales (non-business)"],
+      ["Self-employed health insurance",  "Adjustment · Line 17",       6800.00, "Annual premium for self-only coverage"],
+      ["Traditional IRA contribution",    "Adjustment · Line 20",       6500.00, "Within annual contribution limit"],
+      ["Student loan interest",           "Adjustment · Line 21",        720.00, "Subject to phase-out by income"],
+      ["1099-INT interest income",        "Additional income · Line 8z", 148.00, "Interest from savings account"],
+      ["Hobby income",                    "Additional income · Line 8j", 340.00, "Occasional craft sales (non-business)"],
     ];
-    // Map an item type to its Schedule 1 section (Adjustment vs Additional income)
-    const sch1Section = type => type === "Additional income" ? "Additional income" : "Adjustment";
+    // Build the Section column for real entries by combining the part-level
+    // section ("Adjustment" / "Additional income") with the IRS line number
+    // from SCHEDULE_1_REFERENCE. This gives tax professionals direct routing
+    // context — they know exactly which line each item should land on.
     const sch1RowsToRender = sch1HasUserData
-      ? sched1Items.map(it => [it.itemType, sch1Section(it.itemType), parseFloat(it.amount) || 0, it.notes || ""])
+      ? sched1Items.map(it => {
+          const ref = getSched1Reference(it.itemType);
+          const sectionLabel = ref.line && ref.line !== "—"
+            ? `${ref.section} · ${ref.line}`
+            : ref.section;
+          return [it.itemType, sectionLabel, parseFloat(it.amount) || 0, it.notes || ""];
+        })
       : sch1SampleRows;
     sch1RowsToRender.forEach((row, rIdx) => {
       const r = SCH1_HDR_ROW + 1 + rIdx;
