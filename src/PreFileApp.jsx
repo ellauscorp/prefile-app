@@ -3416,7 +3416,7 @@ const CHECK_ITEMS = [
 // Transaction-entry model: asset / dates / proceeds / cost basis / notes.
 // Term is inferred at render time from the two dates (calendar arithmetic).
 // ═══════════════════════════════════════════════════════════════════════════════
-function SchedDScreen({ items, onAdd, onDelete, onBack, pendingRestore, onRestore, onDiscardRestore }) {
+function SchedDScreen({ items, onAdd, onDelete, onBack }) {
   const [form, setForm] = useState({ asset: "", dateAcquired: "", dateSold: "", proceeds: "", costBasis: "", notes: "" });
   const [errors, setErrors] = useState({});
 
@@ -3464,37 +3464,6 @@ function SchedDScreen({ items, onAdd, onDelete, onBack, pendingRestore, onRestor
           Add stock, ETF, or crypto sales as you make them. Term is inferred from the dates.
         </p>
       </div>
-
-      {pendingRestore && (
-        <div style={{
-          marginBottom: 20, padding: "14px 16px",
-          background: "#FFFAF0",
-          border: "1px solid rgba(230,184,0,0.35)",
-          borderLeft: "3px solid #E6B800",
-          borderRadius: 10, lineHeight: 1.5,
-          display: "flex", flexDirection: "column", gap: 10,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-            <Icon name="folder" size={16} color="#E6B800" strokeWidth={2.2} style={{ flexShrink: 0 }} />
-            <div style={{ flex: "1 1 240px", minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 1 }}>
-                Resume saved Schedule D progress?
-              </div>
-              <div style={{ fontSize: 12, color: C.inkLight }}>
-                We found {pendingRestore.count} saved {pendingRestore.count === 1 ? "transaction" : "transactions"} on this device.
-              </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-              <button onClick={onRestore} style={{ background: C.forest, color: C.white, border: "none", borderRadius: 9, padding: "8px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                Resume
-              </button>
-              <button onClick={onDiscardRestore} style={{ background: "transparent", color: C.inkLight, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", textDecoration: "underline" }}>
-                Start fresh
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* List of entered items */}
       {items.length > 0 && (
@@ -3583,7 +3552,7 @@ function SchedDScreen({ items, onAdd, onDelete, onBack, pendingRestore, onRestor
 // Adjustment / item-type model: typed dropdown of common adjustments and
 // additional income items, with amount and optional notes.
 // ═══════════════════════════════════════════════════════════════════════════════
-function Sched1Screen({ items, onAdd, onDelete, onBack, pendingRestore, onRestore, onDiscardRestore }) {
+function Sched1Screen({ items, onAdd, onDelete, onBack }) {
   const [form, setForm] = useState({ itemType: SCHED_1_ITEM_TYPES[0], amount: "", notes: "" });
   const [errors, setErrors] = useState({});
 
@@ -3626,37 +3595,6 @@ function Sched1Screen({ items, onAdd, onDelete, onBack, pendingRestore, onRestor
           Add items that don't fit the Schedule C expense flow — health insurance, IRA contributions, student loan interest, additional income.
         </p>
       </div>
-
-      {pendingRestore && (
-        <div style={{
-          marginBottom: 20, padding: "14px 16px",
-          background: "#FFFAF0",
-          border: "1px solid rgba(230,184,0,0.35)",
-          borderLeft: "3px solid #E6B800",
-          borderRadius: 10, lineHeight: 1.5,
-          display: "flex", flexDirection: "column", gap: 10,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-            <Icon name="folder" size={16} color="#E6B800" strokeWidth={2.2} style={{ flexShrink: 0 }} />
-            <div style={{ flex: "1 1 240px", minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 1 }}>
-                Resume saved Schedule 1 progress?
-              </div>
-              <div style={{ fontSize: 12, color: C.inkLight }}>
-                We found {pendingRestore.count} saved {pendingRestore.count === 1 ? "item" : "items"} on this device.
-              </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-              <button onClick={onRestore} style={{ background: C.forest, color: C.white, border: "none", borderRadius: 9, padding: "8px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                Resume
-              </button>
-              <button onClick={onDiscardRestore} style={{ background: "transparent", color: C.inkLight, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", textDecoration: "underline" }}>
-                Start fresh
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* List of entered items */}
       {items.length > 0 && (
@@ -4020,8 +3958,6 @@ export default function PreFileApp() {
   //   Schedule 1 = adjustment/item-type model (typed line items)
   const [schedDItems, setSchedDItems] = useState([]);
   const [sched1Items, setSched1Items] = useState([]);
-  const [pendingSchedDRestore, setPendingSchedDRestore] = useState(null); // { count, data } | null
-  const [pendingSched1Restore, setPendingSched1Restore] = useState(null); // { count, data } | null
   const [toast, setToast]           = useState({ visible: false, message: "" });
   const [isSaved, setIsSaved]       = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
@@ -4090,67 +4026,47 @@ export default function PreFileApp() {
   }, [receipts, pendingRestore]);
 
   // ── Schedule D / Schedule 1 persistence ──
-  // Match the explicit receipt restore pattern: measure saved progress on
-  // mount, stage it as pending, and let the user consciously resume or start
-  // fresh rather than silently restoring items into view.
+  // TODO: extend pendingRestore measure-then-prompt to also gate Sched D /
+  // Sched 1 restore so users opt in. For now these silently rehydrate on
+  // mount because the surprise factor is much smaller (single-digit items
+  // expected, not dozens of receipts).
   useEffect(() => {
     const savedD = localStorage.getItem("prefile_sched_d");
     if (savedD) {
       try {
         const parsed = JSON.parse(savedD);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setPendingSchedDRestore({ count: parsed.length, data: parsed });
-        }
+        if (Array.isArray(parsed)) setSchedDItems(parsed);
       } catch (e) {}
     }
     const saved1 = localStorage.getItem("prefile_sched_1");
     if (saved1) {
       try {
         const parsed = JSON.parse(saved1);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setPendingSched1Restore({ count: parsed.length, data: parsed });
-        }
+        if (Array.isArray(parsed)) setSched1Items(parsed);
       } catch (e) {}
     }
   }, []);
 
-  const handleRestoreSchedD = () => {
-    if (!pendingSchedDRestore) return;
-    setSchedDItems(pendingSchedDRestore.data);
-    setPendingSchedDRestore(null);
-  };
-
-  const handleDiscardSchedDRestore = () => {
-    localStorage.removeItem("prefile_sched_d");
-    setPendingSchedDRestore(null);
-  };
-
-  const handleRestoreSched1 = () => {
-    if (!pendingSched1Restore) return;
-    setSched1Items(pendingSched1Restore.data);
-    setPendingSched1Restore(null);
-  };
-
-  const handleDiscardSched1Restore = () => {
-    localStorage.removeItem("prefile_sched_1");
-    setPendingSched1Restore(null);
-  };
-
   useEffect(() => {
-    if (pendingSchedDRestore && schedDItems.length == 0) return;
-    if (pendingSchedDRestore && schedDItems.length > 0) {
-      setPendingSchedDRestore(null);
-    }
     localStorage.setItem("prefile_sched_d", JSON.stringify(schedDItems));
-  }, [schedDItems, pendingSchedDRestore]);
+  }, [schedDItems]);
 
   useEffect(() => {
-    if (pendingSched1Restore && sched1Items.length == 0) return;
-    if (pendingSched1Restore && sched1Items.length > 0) {
-      setPendingSched1Restore(null);
-    }
     localStorage.setItem("prefile_sched_1", JSON.stringify(sched1Items));
-  }, [sched1Items, pendingSched1Restore]);
+  }, [sched1Items]);
+
+  const handleAddSchedD = item => {
+    setSchedDItems(prev => [...prev, { ...item, id: Date.now() }]);
+  };
+  const handleDeleteSchedD = id => {
+    setSchedDItems(prev => prev.filter(it => it.id !== id));
+  };
+  const handleAddSched1 = item => {
+    setSched1Items(prev => [...prev, { ...item, id: Date.now() }]);
+  };
+  const handleDeleteSched1 = id => {
+    setSched1Items(prev => prev.filter(it => it.id !== id));
+  };
 
   const showToast = msg => {
     setToast({ visible: true, message: msg });
@@ -5272,10 +5188,10 @@ export default function PreFileApp() {
           <OrganizerScreen receipts={receipts} onAddAnother={handleAddAnother} isSaved={isSaved} onExport={handleExport} showSavedConfirm={showSavedConfirm} onGenerateSummary={handleGenerateSummary} onClearData={handleClearData} onDeleteReceipt={handleDeleteReceipt} showDownloadMsg={showDownloadMsg} isDownloading={isDownloading} pendingRestore={pendingRestore} onRestore={handleRestore} onDiscardRestore={handleDiscardRestore} schedDItems={schedDItems} sched1Items={sched1Items} onOpenSchedD={() => { setEntryOrigin("organizer"); setPage("schedule-d"); }} onOpenSched1={() => { setEntryOrigin("organizer"); setPage("schedule-1"); }} />
         )}
         {page === "schedule-d" && (
-          <SchedDScreen items={schedDItems} onAdd={handleAddSchedD} onDelete={handleDeleteSchedD} onBack={() => setPage(entryOrigin === "organizer" ? "organizer" : "receipt-flow")} pendingRestore={pendingSchedDRestore} onRestore={handleRestoreSchedD} onDiscardRestore={handleDiscardSchedDRestore} />
+          <SchedDScreen items={schedDItems} onAdd={handleAddSchedD} onDelete={handleDeleteSchedD} onBack={() => setPage(entryOrigin === "organizer" ? "organizer" : "receipt-flow")} />
         )}
         {page === "schedule-1" && (
-          <Sched1Screen items={sched1Items} onAdd={handleAddSched1} onDelete={handleDeleteSched1} onBack={() => setPage(entryOrigin === "organizer" ? "organizer" : "receipt-flow")} pendingRestore={pendingSched1Restore} onRestore={handleRestoreSched1} onDiscardRestore={handleDiscardSched1Restore} />
+          <Sched1Screen items={sched1Items} onAdd={handleAddSched1} onDelete={handleDeleteSched1} onBack={() => setPage(entryOrigin === "organizer" ? "organizer" : "receipt-flow")} />
         )}
         {page === "check" && renderCheckFlow()}
         {page === "yearend" && (
