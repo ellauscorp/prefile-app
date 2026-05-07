@@ -1242,57 +1242,33 @@ function Homepage({ onStart, onCheck }) {
 
 // STEP 1 — ADD RECEIPT
 function AddReceiptScreen({ onMethod, isMobile }) {
-  // Hidden file inputs for the upload + scan paths.
-  // - uploadInputRef: standard file picker (images + PDFs), used by all
-  //   "Upload" CTAs and by the desktop "Scan" CTA as a graceful fallback.
-  // - cameraInputRef: camera-capture input, used only by the mobile "Scan"
-  //   primary card. The capture="environment" attribute prompts the OS to
-  //   open the rear camera; on devices without camera support the browser
-  //   falls back to a normal file picker automatically.
+  // Hidden file input for the upload path (images + PDFs).
   const uploadInputRef = useRef(null);
-  const cameraInputRef = useRef(null);
 
-  // Trigger handlers — programmatically open the right picker for each CTA.
+  // Trigger handler — programmatically opens the file picker.
   const triggerUpload = () => uploadInputRef.current && uploadInputRef.current.click();
-  const triggerCamera = () => {
-    // Mobile uses the camera-capture input; desktop falls back to the file
-    // picker so the scan button is never a dead path.
-    if (isMobile && cameraInputRef.current) {
-      cameraInputRef.current.click();
-    } else if (uploadInputRef.current) {
-      uploadInputRef.current.click();
-    }
-  };
 
   // After the user selects a file, continue into the established intake flow.
   // The selected file itself is not yet wired through to extraction (the
   // existing pipeline uses a mocked extractor); this preserves the current
   // downstream behavior while making the intake interaction real.
-  const handleFileSelected = method => e => {
+  const handleFileSelected = e => {
     const file = e.target && e.target.files && e.target.files[0];
     if (!file) return;
     // Reset the input so the same file can be re-picked later
     e.target.value = "";
-    onMethod(method);
+    onMethod("upload");
   };
 
   return (
     <div className="slide-up" style={{ maxWidth: 520, margin: "0 auto", padding: "40px 24px" }}>
-      {/* Hidden inputs — referenced by the visible CTAs above */}
+      {/* Hidden file input — referenced by the Upload CTA below */}
       <input
         ref={uploadInputRef}
         type="file"
         accept="image/*,application/pdf"
         style={{ display: "none" }}
-        onChange={handleFileSelected("upload")}
-      />
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        style={{ display: "none" }}
-        onChange={handleFileSelected("scan")}
+        onChange={handleFileSelected}
       />
 
       <div style={{ marginBottom: 28 }}>
@@ -1306,35 +1282,12 @@ function AddReceiptScreen({ onMethod, isMobile }) {
         </p>
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:14, marginBottom:16 }}>
-        {/* Primary on mobile: Scan. Primary on desktop: Upload */}
-        {isMobile ? (
-          <button className="method-card primary" onClick={triggerCamera} style={{ gridColumn:"1/-1" }}>
-            <span style={{ fontSize:36 }}>📷</span>
-            <div style={{ fontSize:16, fontWeight:700, color:C.forest, fontFamily:"'Fraunces', serif" }}>Scan a document</div>
-            <div style={{ fontSize:12, color:C.inkFaint }}>Point your camera at any document</div>
-          </button>
-        ) : (
-          <button className="method-card primary" onClick={triggerUpload}>
-            <span style={{ fontSize:36 }}>📂</span>
-            <div style={{ fontSize:15, fontWeight:700, color:C.forest, fontFamily:"'Fraunces', serif" }}>Upload file</div>
-            <div style={{ fontSize:12, color:C.inkFaint }}>JPG, PNG, or PDF</div>
-          </button>
-        )}
-
-        {isMobile ? (
-          <button className="method-card" onClick={triggerUpload}>
-            <span style={{ fontSize:30 }}>📂</span>
-            <div style={{ fontSize:14, fontWeight:600, color:C.ink }}>Upload from library</div>
-            <div style={{ fontSize:12, color:C.inkFaint }}>Photo or PDF</div>
-          </button>
-        ) : (
-          <button className="method-card" onClick={triggerCamera}>
-            <span style={{ fontSize:30 }}>📷</span>
-            <div style={{ fontSize:14, fontWeight:600, color:C.ink }}>Scan a document</div>
-            <div style={{ fontSize:12, color:C.inkFaint }}>Use your camera</div>
-          </button>
-        )}
+      <div style={{ marginBottom: 16 }}>
+        <button className="method-card primary" onClick={triggerUpload} style={{ width:"100%" }}>
+          <span style={{ fontSize:36 }}>📂</span>
+          <div style={{ fontSize:15, fontWeight:700, color:C.forest, fontFamily:"'Fraunces', serif" }}>Upload file</div>
+          <div style={{ fontSize:12, color:C.inkFaint }}>JPG, PNG, or PDF</div>
+        </button>
       </div>
 
       <div style={{ position:"relative", marginBottom:16 }}>
