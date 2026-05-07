@@ -3948,6 +3948,7 @@ export default function PreFileApp() {
   const [checkStep, setCheckStep]   = useState("questions"); // questions | loading | reveal
   const [checkAnswers, setCheckAnswers] = useState(null);
   const [method, setMethod]         = useState(null);
+  const [entryOrigin, setEntryOrigin] = useState("flow"); // flow | organizer
   const [pendingReceipt, setPendingReceipt] = useState(null);
   const [receipts, setReceipts]     = useState([]);
   // ── Schedule D / Schedule 1 manual-entry state ──
