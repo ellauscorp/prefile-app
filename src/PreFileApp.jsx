@@ -1280,35 +1280,13 @@ function AddReceiptScreen({ onMethod, isMobile }) {
 }
 
 // STEP 2 — PROCESSING / MANUAL ENTRY
+// Manual-first product phase: this screen is the manual entry form.
+// The legacy upload/scan extraction path (fake "Reading your receipt…"
+// timers + random SAMPLE_MERCHANTS injection) has been removed. The
+// `method` prop is still accepted for caller-API stability but no longer
+// affects behavior — every entry path lands directly in the manual form.
 function ProcessingScreen({ method, onExtracted, receipts = [] }) {
-  const [phase, setPhase] = useState(method === "manual" ? "manual" : "loading");
   const [manualData, setManualData] = useState({ merchant: "", amount: "", date: new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}), category: "" });
-
-  useEffect(() => {
-    if (method !== "manual") {
-      const t1 = setTimeout(() => setPhase("extracting"), 800);
-      const t2 = setTimeout(() => {
-        // Pick a random sample receipt as mock extraction
-        const sample = SAMPLE_MERCHANTS[Math.floor(Math.random() * SAMPLE_MERCHANTS.length)];
-        onExtracted({ ...sample, tag: suggestTag(sample.merchant), id: Date.now(), businessPct: 100 });
-      }, 2400);
-      return () => { clearTimeout(t1); clearTimeout(t2); };
-    }
-  }, [method]);
-
-  if (phase === "loading" || phase === "extracting") {
-    return (
-      <div className="fade-in" style={{ maxWidth:520, margin:"0 auto", padding:"80px 24px", textAlign:"center" }}>
-        <div style={{ width:48, height:48, borderRadius:"50%", border:`3px solid ${C.creamDeep}`, borderTopColor:C.forest, margin:"0 auto 24px" }} className="spin" />
-        <div style={{ fontFamily:"'Fraunces', serif", fontSize:22, fontWeight:600, color:C.ink, marginBottom:8 }}>
-          {phase === "loading" ? "Uploading…" : "Reading your receipt…"}
-        </div>
-        <div style={{ fontSize:13, color:C.inkFaint }}>
-          {phase === "extracting" ? "Extracting merchant, amount, and date" : ""}
-        </div>
-      </div>
-    );
-  }
 
   // Manual entry form
   const handleManualSubmit = () => {
