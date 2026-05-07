@@ -362,6 +362,32 @@ function suggestTag(merchant) {
   return null;
 }
 
+// ── Schedule 1 item type catalog ──
+// Suggested types for the Schedule 1 manual-entry dropdown. Users can also
+// pick "Other adjustment" or "Other income" and label it themselves via notes.
+const SCHED_1_ITEM_TYPES = [
+  "Self-employed health insurance",
+  "IRA contribution",
+  "Student loan interest",
+  "Additional income",
+  "Other adjustment",
+];
+
+// ── Schedule D term inference ──
+// Returns "Long-term" (held >1 year) or "Short-term" per IRS holding-period
+// rule. This is calendar arithmetic, not a tax calculation. Returns "" if
+// either date is missing or unparseable.
+function computeSchedDTerm(dateAcquired, dateSold) {
+  if (!dateAcquired || !dateSold) return "";
+  const a = new Date(dateAcquired);
+  const s = new Date(dateSold);
+  if (isNaN(a.getTime()) || isNaN(s.getTime())) return "";
+  // Holding period: > 1 year between acquisition and sale → long-term
+  const oneYearLater = new Date(a);
+  oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+  return s > oneYearLater ? "Long-term" : "Short-term";
+}
+
 const SAMPLE_MERCHANTS = [
   { merchant: "Canva Pro — monthly plan",      amount: "12.99", date: "Apr 18, 2026", category: "Software & subscriptions" },
   { merchant: "USPS — label purchase",          amount: "18.45", date: "Apr 15, 2026", category: "Supplies" },
@@ -2215,7 +2241,7 @@ function YearEndSummary({ receipts, onBack, onPrint }) {
   );
 }
 
-function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedConfirm, onGenerateSummary, onClearData, onDeleteReceipt, showDownloadMsg, isDownloading, pendingRestore, onRestore, onDiscardRestore }) {
+function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedConfirm, onGenerateSummary, onClearData, onDeleteReceipt, showDownloadMsg, isDownloading, pendingRestore, onRestore, onDiscardRestore, schedDItems = [], sched1Items = [], onOpenSchedD, onOpenSched1 }) {
   const [confirmed, setConfirmed] = useState(false);
   const [monthOpen, setMonthOpen] = useState(false);
   const total = receipts.reduce((s, r) => s + ((parseFloat(r.amount) || 0) * ((r.businessPct || 100) / 100)), 0);
@@ -3084,6 +3110,57 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
         </div>
 
       </div>
+
+      {/* More tax modules — Schedule D / Schedule 1 entry points */}
+      <div style={{ maxWidth: 980, margin: "32px auto 0", padding: "0 24px" }}>
+        <div className="pf-label" style={{ marginBottom: 12 }}>More tax modules</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
+          <button
+            onClick={onOpenSchedD}
+            style={{
+              background: C.white, border: `1px solid ${C.creamDeep}`, borderRadius: 12,
+              padding: "16px 18px", textAlign: "left", cursor: "pointer",
+              display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14,
+              fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, fontFamily: "'Fraunces', serif", marginBottom: 3 }}>
+                Schedule D
+              </div>
+              <div style={{ fontSize: 12, color: C.inkFaint, lineHeight: 1.5 }}>
+                Capital gains & investment activity
+              </div>
+            </div>
+            <div style={{ flexShrink: 0, fontSize: 12, color: C.forest, fontWeight: 600 }}>
+              {schedDItems.length > 0 ? `${schedDItems.length} entered →` : "Add →"}
+            </div>
+          </button>
+
+          <button
+            onClick={onOpenSched1}
+            style={{
+              background: C.white, border: `1px solid ${C.creamDeep}`, borderRadius: 12,
+              padding: "16px 18px", textAlign: "left", cursor: "pointer",
+              display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14,
+              fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, fontFamily: "'Fraunces', serif", marginBottom: 3 }}>
+                Schedule 1
+              </div>
+              <div style={{ fontSize: 12, color: C.inkFaint, lineHeight: 1.5 }}>
+                Adjustments & additional income
+              </div>
+            </div>
+            <div style={{ flexShrink: 0, fontSize: 12, color: C.forest, fontWeight: 600 }}>
+              {sched1Items.length > 0 ? `${sched1Items.length} entered →` : "Add →"}
+            </div>
+          </button>
+        </div>
+      </div>
+
       <DisclaimerFooter />
     </div>
   );
@@ -3160,6 +3237,203 @@ const CHECK_ITEMS = [
     form: "Schedule 1",
   },
 ];
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCHEDULE D MANUAL ENTRY
+// Transaction-entry model: asset / dates / proceeds / cost basis / notes.
+// Term is inferred at render time from the two dates (calendar arithmetic).
+// ═══════════════════════════════════════════════════════════════════════════════
+function SchedDScreen({ items, onAdd, onDelete, onBack }) {
+  const [form, setForm] = useState({ asset: "", dateAcquired: "", dateSold: "", proceeds: "", costBasis: "", notes: "" });
+  const canSubmit = form.asset && form.dateAcquired && form.dateSold && form.proceeds && form.costBasis;
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    onAdd({
+      asset: form.asset,
+      dateAcquired: form.dateAcquired,
+      dateSold: form.dateSold,
+      proceeds: parseFloat(form.proceeds) || 0,
+      costBasis: parseFloat(form.costBasis) || 0,
+      notes: form.notes || "",
+    });
+    setForm({ asset: "", dateAcquired: "", dateSold: "", proceeds: "", costBasis: "", notes: "" });
+  };
+
+  return (
+    <div className="slide-up" style={{ maxWidth: 640, margin: "0 auto", padding: "40px 24px" }}>
+      <button onClick={onBack} style={{ background: "none", border: "none", color: C.inkFaint, fontSize: 13, cursor: "pointer", marginBottom: 16, padding: 0 }}>
+        ← Back to organizer
+      </button>
+
+      <div style={{ marginBottom: 28 }}>
+        <div className="pf-label">Schedule D</div>
+        <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, fontWeight: 700, color: C.ink, letterSpacing: "-0.4px", marginBottom: 8 }}>
+          Capital gains & investment activity
+        </h2>
+        <p style={{ fontSize: 14, color: C.inkLight, lineHeight: 1.65 }}>
+          Add stock, ETF, or crypto sales as you make them. Term is inferred from the dates.
+        </p>
+      </div>
+
+      {/* List of entered items */}
+      {items.length > 0 && (
+        <div style={{ marginBottom: 28 }}>
+          <div className="pf-label" style={{ marginBottom: 8 }}>Your entries ({items.length})</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {items.map(it => {
+              const term = computeSchedDTerm(it.dateAcquired, it.dateSold);
+              const gain = (it.proceeds || 0) - (it.costBasis || 0);
+              return (
+                <div key={it.id} style={{ background: C.white, borderRadius: 10, padding: "12px 14px", border: `1px solid ${C.creamDeep}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 2 }}>{it.asset}</div>
+                    <div style={{ fontSize: 11, color: C.inkFaint }}>
+                      {it.dateAcquired} → {it.dateSold} · {term || "—"} · {gain >= 0 ? "+" : ""}${gain.toFixed(2)}
+                    </div>
+                  </div>
+                  <button onClick={() => onDelete(it.id)} style={{ background: "none", border: "none", color: C.inkFaint, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>
+                    Delete
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Entry form */}
+      <div style={{ background: C.white, borderRadius: 12, padding: 20, border: `1px solid ${C.creamDeep}` }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 14 }}>Add a transaction</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <div className="pf-label">Asset / description</div>
+            <input className="pf-input" placeholder="e.g. Acme Corp common stock (50 sh)" value={form.asset} onChange={e => setForm(f => ({ ...f, asset: e.target.value }))} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <div className="pf-label">Date acquired</div>
+              <input className="pf-input" placeholder="Mar 12, 2023" value={form.dateAcquired} onChange={e => setForm(f => ({ ...f, dateAcquired: e.target.value }))} />
+            </div>
+            <div>
+              <div className="pf-label">Date sold</div>
+              <input className="pf-input" placeholder="Aug 4, 2025" value={form.dateSold} onChange={e => setForm(f => ({ ...f, dateSold: e.target.value }))} />
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <div className="pf-label">Proceeds</div>
+              <input className="pf-input" type="number" placeholder="4250.00" value={form.proceeds} onChange={e => setForm(f => ({ ...f, proceeds: e.target.value }))} />
+            </div>
+            <div>
+              <div className="pf-label">Cost basis</div>
+              <input className="pf-input" type="number" placeholder="3100.00" value={form.costBasis} onChange={e => setForm(f => ({ ...f, costBasis: e.target.value }))} />
+            </div>
+          </div>
+          <div>
+            <div className="pf-label">Notes (optional)</div>
+            <input className="pf-input" placeholder="Any context for your tax professional" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+          </div>
+          <button className="pf-btn-primary" onClick={handleSubmit} disabled={!canSubmit} style={{ opacity: canSubmit ? 1 : 0.4, cursor: canSubmit ? "pointer" : "not-allowed" }}>
+            Add transaction →
+          </button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 18, fontSize: 11, color: C.inkFaint, textAlign: "center" }}>
+        Structured entry only — PreFile does not calculate your tax · Confirm with your tax professional
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCHEDULE 1 MANUAL ENTRY
+// Adjustment / item-type model: typed dropdown of common adjustments and
+// additional income items, with amount and optional notes.
+// ═══════════════════════════════════════════════════════════════════════════════
+function Sched1Screen({ items, onAdd, onDelete, onBack }) {
+  const [form, setForm] = useState({ itemType: SCHED_1_ITEM_TYPES[0], amount: "", notes: "" });
+  const canSubmit = form.itemType && form.amount;
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    onAdd({
+      itemType: form.itemType,
+      amount: parseFloat(form.amount) || 0,
+      notes: form.notes || "",
+    });
+    setForm({ itemType: SCHED_1_ITEM_TYPES[0], amount: "", notes: "" });
+  };
+
+  return (
+    <div className="slide-up" style={{ maxWidth: 640, margin: "0 auto", padding: "40px 24px" }}>
+      <button onClick={onBack} style={{ background: "none", border: "none", color: C.inkFaint, fontSize: 13, cursor: "pointer", marginBottom: 16, padding: 0 }}>
+        ← Back to organizer
+      </button>
+
+      <div style={{ marginBottom: 28 }}>
+        <div className="pf-label">Schedule 1</div>
+        <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, fontWeight: 700, color: C.ink, letterSpacing: "-0.4px", marginBottom: 8 }}>
+          Adjustments & additional income
+        </h2>
+        <p style={{ fontSize: 14, color: C.inkLight, lineHeight: 1.65 }}>
+          Add items that don't fit the Schedule C expense flow — health insurance, IRA contributions, student loan interest, additional income.
+        </p>
+      </div>
+
+      {/* List of entered items */}
+      {items.length > 0 && (
+        <div style={{ marginBottom: 28 }}>
+          <div className="pf-label" style={{ marginBottom: 8 }}>Your entries ({items.length})</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {items.map(it => (
+              <div key={it.id} style={{ background: C.white, borderRadius: 10, padding: "12px 14px", border: `1px solid ${C.creamDeep}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 2 }}>{it.itemType}</div>
+                  <div style={{ fontSize: 11, color: C.inkFaint }}>
+                    ${(it.amount || 0).toFixed(2)}{it.notes ? ` · ${it.notes}` : ""}
+                  </div>
+                </div>
+                <button onClick={() => onDelete(it.id)} style={{ background: "none", border: "none", color: C.inkFaint, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Entry form */}
+      <div style={{ background: C.white, borderRadius: 12, padding: 20, border: `1px solid ${C.creamDeep}` }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 14 }}>Add an item</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <div className="pf-label">Item type</div>
+            <select className="pf-input" value={form.itemType} onChange={e => setForm(f => ({ ...f, itemType: e.target.value }))}>
+              {SCHED_1_ITEM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <div className="pf-label">Amount</div>
+            <input className="pf-input" type="number" placeholder="6800.00" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
+          </div>
+          <div>
+            <div className="pf-label">Notes (optional)</div>
+            <input className="pf-input" placeholder="Any context for your tax professional" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+          </div>
+          <button className="pf-btn-primary" onClick={handleSubmit} disabled={!canSubmit} style={{ opacity: canSubmit ? 1 : 0.4, cursor: canSubmit ? "pointer" : "not-allowed" }}>
+            Add item →
+          </button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 18, fontSize: 11, color: C.inkFaint, textAlign: "center" }}>
+        Structured entry only — PreFile does not calculate your tax · Confirm with your tax professional
+      </div>
+    </div>
+  );
+}
 
 // Step 1 — Questions
 function CheckQuestions({ onDone }) {
@@ -3452,6 +3726,13 @@ export default function PreFileApp() {
   const [method, setMethod]         = useState(null);
   const [pendingReceipt, setPendingReceipt] = useState(null);
   const [receipts, setReceipts]     = useState([]);
+  // ── Schedule D / Schedule 1 manual-entry state ──
+  // Kept separate from the receipts/category model because these schedules
+  // have fundamentally different shapes:
+  //   Schedule D = transaction-entry model (asset, dates, proceeds, basis)
+  //   Schedule 1 = adjustment/item-type model (typed line items)
+  const [schedDItems, setSchedDItems] = useState([]);
+  const [sched1Items, setSched1Items] = useState([]);
   const [toast, setToast]           = useState({ visible: false, message: "" });
   const [isSaved, setIsSaved]       = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
@@ -3518,6 +3799,49 @@ export default function PreFileApp() {
     }
     localStorage.setItem("prefile_receipts", JSON.stringify(receipts));
   }, [receipts, pendingRestore]);
+
+  // ── Schedule D / Schedule 1 persistence ──
+  // TODO: extend pendingRestore measure-then-prompt to also gate Sched D /
+  // Sched 1 restore so users opt in. For now these silently rehydrate on
+  // mount because the surprise factor is much smaller (single-digit items
+  // expected, not dozens of receipts).
+  useEffect(() => {
+    const savedD = localStorage.getItem("prefile_sched_d");
+    if (savedD) {
+      try {
+        const parsed = JSON.parse(savedD);
+        if (Array.isArray(parsed)) setSchedDItems(parsed);
+      } catch (e) {}
+    }
+    const saved1 = localStorage.getItem("prefile_sched_1");
+    if (saved1) {
+      try {
+        const parsed = JSON.parse(saved1);
+        if (Array.isArray(parsed)) setSched1Items(parsed);
+      } catch (e) {}
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("prefile_sched_d", JSON.stringify(schedDItems));
+  }, [schedDItems]);
+
+  useEffect(() => {
+    localStorage.setItem("prefile_sched_1", JSON.stringify(sched1Items));
+  }, [sched1Items]);
+
+  const handleAddSchedD = item => {
+    setSchedDItems(prev => [...prev, { ...item, id: Date.now() }]);
+  };
+  const handleDeleteSchedD = id => {
+    setSchedDItems(prev => prev.filter(it => it.id !== id));
+  };
+  const handleAddSched1 = item => {
+    setSched1Items(prev => [...prev, { ...item, id: Date.now() }]);
+  };
+  const handleDeleteSched1 = id => {
+    setSched1Items(prev => prev.filter(it => it.id !== id));
+  };
 
   const showToast = msg => {
     setToast({ visible: true, message: msg });
@@ -4114,9 +4438,21 @@ export default function PreFileApp() {
     // Sample rows are illustrative; no real tax calculations are performed.
     // ──────────────────────────────────────────────────────────────────────
     const wsSchD = {};
+    // Use entered manual data when available, sample rows otherwise
+    const schdHasUserData = schedDItems.length > 0;
     wsSchD["A1"] = { v: "Schedule D Preview", t: "s", s: titleStyle };
-    wsSchD["A2"] = { v: `Tax Year ${TAX_YEAR}  ·  Example layout for capital gains, losses, and investment activity`, t: "s", s: subheaderStyle };
-    wsSchD["A3"] = { v: "Sample structure — no real investment data is calculated.", t: "s", s: bylineStyle };
+    wsSchD["A2"] = {
+      v: schdHasUserData
+        ? `Tax Year ${TAX_YEAR}  ·  Capital gains, losses, and investment activity`
+        : `Tax Year ${TAX_YEAR}  ·  Example layout for capital gains, losses, and investment activity`,
+      t: "s", s: subheaderStyle,
+    };
+    wsSchD["A3"] = {
+      v: schdHasUserData
+        ? "Manual entries — confirm with your tax professional before filing."
+        : "Sample structure — no real investment data is calculated.",
+      t: "s", s: bylineStyle,
+    };
 
     const SCHD_HDR_ROW = 5;
     const schdHeaders = ["Description / Asset", "Date acquired", "Date sold", "Proceeds", "Cost basis", "Gain / Loss", "Term"];
@@ -4132,7 +4468,17 @@ export default function PreFileApp() {
       ["Index ETF (VTI, 10 sh)",          "Jun 5, 2024",  "Nov 18, 2025", 2480.00, 2310.00,  170.00, "Short-term"],
       ["Bitcoin (0.05 BTC)",              "Jan 22, 2024", "Sep 30, 2025", 3120.00, 2050.00, 1070.00, "Short-term"],
     ];
-    schdSampleRows.forEach((row, rIdx) => {
+    // Source rows: real entries if any, sample rows otherwise
+    const schdRowsToRender = schdHasUserData
+      ? schedDItems.map(it => {
+          const proceeds = parseFloat(it.proceeds) || 0;
+          const basis    = parseFloat(it.costBasis) || 0;
+          const gain     = proceeds - basis;
+          const term     = computeSchedDTerm(it.dateAcquired, it.dateSold) || "—";
+          return [it.asset, it.dateAcquired, it.dateSold, proceeds, basis, gain, term];
+        })
+      : schdSampleRows;
+    schdRowsToRender.forEach((row, rIdx) => {
       const r = SCHD_HDR_ROW + 1 + rIdx;
       const isOdd = rIdx % 2 === 1;
       const textStyle  = isOdd ? dataRowOddStyle    : dataRowEvenStyle;
@@ -4149,10 +4495,12 @@ export default function PreFileApp() {
       wsSchD["G" + r] = { v: row[6], t: "s", s: textStyle };
     });
 
-    // Footer note (2 rows below last sample row)
-    const schdFooterRow = SCHD_HDR_ROW + 1 + schdSampleRows.length + 1;
+    // Footer note (2 rows below last row)
+    const schdFooterRow = SCHD_HDR_ROW + 1 + schdRowsToRender.length + 1;
     wsSchD["A" + schdFooterRow] = {
-      v: "Preview structure only — real Schedule D values require imported or entered investment data.",
+      v: schdHasUserData
+        ? "Manual entries · Term inferred from acquisition and sale dates · Confirm all values with your tax professional before filing."
+        : "Preview structure only — real Schedule D values require imported or entered investment data.",
       t: "s", s: disclaimerStyle,
     };
 
@@ -4189,9 +4537,20 @@ export default function PreFileApp() {
     // that don't appear in the Schedule C expense flow. Sample rows only.
     // ──────────────────────────────────────────────────────────────────────
     const wsSch1 = {};
+    const sch1HasUserData = sched1Items.length > 0;
     wsSch1["A1"] = { v: "Schedule 1 Preview", t: "s", s: titleStyle };
-    wsSch1["A2"] = { v: `Tax Year ${TAX_YEAR}  ·  Example layout for adjustments and additional income items`, t: "s", s: subheaderStyle };
-    wsSch1["A3"] = { v: "Sample structure — no real adjustments are calculated.", t: "s", s: bylineStyle };
+    wsSch1["A2"] = {
+      v: sch1HasUserData
+        ? `Tax Year ${TAX_YEAR}  ·  Adjustments and additional income items`
+        : `Tax Year ${TAX_YEAR}  ·  Example layout for adjustments and additional income items`,
+      t: "s", s: subheaderStyle,
+    };
+    wsSch1["A3"] = {
+      v: sch1HasUserData
+        ? "Manual entries — confirm with your tax professional before filing."
+        : "Sample structure — no real adjustments are calculated.",
+      t: "s", s: bylineStyle,
+    };
 
     const SCH1_HDR_ROW = 5;
     wsSch1["A" + SCH1_HDR_ROW] = { v: "Item",              t: "s", s: tableHeaderStyle };
@@ -4206,7 +4565,12 @@ export default function PreFileApp() {
       ["1099-INT interest income",        "Additional income",  148.00, "Interest from savings account"],
       ["Hobby income",                    "Additional income",  340.00, "Occasional craft sales (non-business)"],
     ];
-    sch1SampleRows.forEach((row, rIdx) => {
+    // Map an item type to its Schedule 1 section (Adjustment vs Additional income)
+    const sch1Section = type => type === "Additional income" ? "Additional income" : "Adjustment";
+    const sch1RowsToRender = sch1HasUserData
+      ? sched1Items.map(it => [it.itemType, sch1Section(it.itemType), parseFloat(it.amount) || 0, it.notes || ""])
+      : sch1SampleRows;
+    sch1RowsToRender.forEach((row, rIdx) => {
       const r = SCH1_HDR_ROW + 1 + rIdx;
       const isOdd = rIdx % 2 === 1;
       const textStyle = isOdd ? dataRowOddStyle    : dataRowEvenStyle;
@@ -4217,9 +4581,11 @@ export default function PreFileApp() {
       wsSch1["D" + r] = { v: row[3], t: "s", s: textStyle };
     });
 
-    const sch1FooterRow = SCH1_HDR_ROW + 1 + sch1SampleRows.length + 1;
+    const sch1FooterRow = SCH1_HDR_ROW + 1 + sch1RowsToRender.length + 1;
     wsSch1["A" + sch1FooterRow] = {
-      v: "Preview structure only — real Schedule 1 values require user-entered or imported tax data.",
+      v: sch1HasUserData
+        ? "Manual entries · Confirm all values and section placements with your tax professional before filing."
+        : "Preview structure only — real Schedule 1 values require user-entered or imported tax data.",
       t: "s", s: disclaimerStyle,
     };
 
@@ -4566,7 +4932,13 @@ export default function PreFileApp() {
         )}
         {page === "receipt-flow" && renderReceiptFlow()}
         {page === "organizer" && (
-          <OrganizerScreen receipts={receipts} onAddAnother={handleAddAnother} isSaved={isSaved} onExport={handleExport} showSavedConfirm={showSavedConfirm} onGenerateSummary={handleGenerateSummary} onClearData={handleClearData} onDeleteReceipt={handleDeleteReceipt} showDownloadMsg={showDownloadMsg} isDownloading={isDownloading} pendingRestore={pendingRestore} onRestore={handleRestore} onDiscardRestore={handleDiscardRestore} />
+          <OrganizerScreen receipts={receipts} onAddAnother={handleAddAnother} isSaved={isSaved} onExport={handleExport} showSavedConfirm={showSavedConfirm} onGenerateSummary={handleGenerateSummary} onClearData={handleClearData} onDeleteReceipt={handleDeleteReceipt} showDownloadMsg={showDownloadMsg} isDownloading={isDownloading} pendingRestore={pendingRestore} onRestore={handleRestore} onDiscardRestore={handleDiscardRestore} schedDItems={schedDItems} sched1Items={sched1Items} onOpenSchedD={() => setPage("schedule-d")} onOpenSched1={() => setPage("schedule-1")} />
+        )}
+        {page === "schedule-d" && (
+          <SchedDScreen items={schedDItems} onAdd={handleAddSchedD} onDelete={handleDeleteSchedD} onBack={() => setPage("organizer")} />
+        )}
+        {page === "schedule-1" && (
+          <Sched1Screen items={sched1Items} onAdd={handleAddSched1} onDelete={handleDeleteSched1} onBack={() => setPage("organizer")} />
         )}
         {page === "check" && renderCheckFlow()}
         {page === "yearend" && (
