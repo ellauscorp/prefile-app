@@ -98,6 +98,14 @@ export const PREFILE_POSITIONING = "PreFile turns scattered receipts into a fili
 
 export const PREFILE_USER_RESPONSIBILITY = "You are responsible for reviewing all entries and confirming their accuracy with a qualified tax professional before filing.";
 
+// ── Tax year config ──
+// Single source of truth for the current tax year. To roll the app forward
+// to a new tax year, update TAX_YEAR here. All hardcoded year labels in the
+// homepage badge, paywall preview, workbook subheaders, and filename pull
+// from this constant.
+export const TAX_YEAR = 2026;
+export const TAX_YEAR_LABEL = `Tax year ${TAX_YEAR}`;
+
 // Reusable footer disclaimer block — drop into any screen
 function DisclaimerFooter({ compact = false }) {
   return (
@@ -1021,7 +1029,7 @@ function Homepage({ onStart, onCheck }) {
               transition: "opacity 0.5s, transform 0.5s",
             }}>
               <span style={{ display: "inline-block", background: "rgba(27,94,32,0.1)", color: C.forest, borderRadius: 20, padding: "4px 12px", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 20 }}>
-                Tax year 2025 · Freelancers & side hustlers
+                Tax year {TAX_YEAR} · Freelancers, side hustlers, and small business owners
               </span>
             </div>
 
@@ -1037,18 +1045,18 @@ function Homepage({ onStart, onCheck }) {
             </h1>
 
             <p style={{
-              fontSize: 16, color: C.inkLight, lineHeight: 1.7, marginBottom: 32, maxWidth: 480,
+              fontSize: 16, color: C.inkLight, lineHeight: 1.7, marginBottom: 16, maxWidth: 480,
               opacity: vis ? 1 : 0, transform: vis ? "none" : "translateY(20px)",
               transition: "opacity 0.5s 0.14s, transform 0.5s 0.14s",
             }}>
-              Turn scattered receipts into a filing-ready summary for your tax professional — so tax time isn't a scramble.
+              PreFile helps you build your tax file as you go, so tax season feels calmer, cleaner, and far less overwhelming.
             </p>
-            <p style={{ fontSize: 12, color: C.inkFaint, marginBottom: 0, marginTop: 6 }}>
-              Built for freelancers, small business owners, and side hustlers
-            </p>
-
-            <p style={{ fontSize: 14, color: C.ink, fontWeight: 600, lineHeight: 1.55, marginTop: 22, marginBottom: 16, maxWidth: 460 }}>
-              If you've got a year of receipts and a looming tax deadline — start here.
+            <p style={{
+              fontSize: 14, color: C.inkLight, lineHeight: 1.65, marginBottom: 32, maxWidth: 480,
+              opacity: vis ? 1 : 0, transform: vis ? "none" : "translateY(20px)",
+              transition: "opacity 0.5s 0.18s, transform 0.5s 0.18s",
+            }}>
+              Keep your expenses organized in one place, highlight items to review, and turn your records into a filing-ready summary for your tax professional.
             </p>
 
             <div style={{
@@ -1057,17 +1065,17 @@ function Homepage({ onStart, onCheck }) {
               transition: "opacity 0.5s 0.21s, transform 0.5s 0.21s",
             }}>
               <button className="pf-btn-primary" onClick={() => { logEvent("CTA_START_CLICKED"); onStart(); }} style={{ width: "100%", fontSize: 16, padding: "16px 28px" }}>
-                Organize my receipts →
+                Start my tax file →
               </button>
               <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
                 Free to try · Save your progress as you go
               </div>
               <div>
                 <button className="pf-btn-secondary" onClick={onCheck} style={{ width: "100%" }}>
-                  Check what I might be missing →
+                  See what I might be missing →
                 </button>
                 <div style={{ fontSize: 11, color: C.inkFaint, textAlign: "center", marginTop: 6 }}>
-                  Most freelancers miss at least 3 deductions — check yours in 60 seconds
+                  PreFile checks for common gaps, duplicates, and review items before tax season becomes a scramble
                 </div>
               </div>
             </div>
@@ -1135,7 +1143,7 @@ function Homepage({ onStart, onCheck }) {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 20 }}>
             {[
-              { n:"01", iconName:"receipt", title:"Add your receipts", body:"Photograph, upload, or type in any receipt — meals, software, shipping, phone bills." },
+              { n:"01", iconName:"receipt", title:"Add your receipts", body:"Type in any receipt — meals, software, shipping, phone bills." },
               { n:"02", iconName:"clipboard", title:"PreFile suggests a category", body:"We match common merchants automatically. You confirm or change — you always decide." },
               { n:"03", iconName:"download", title:"Download your organizer", body:"A clean, color-coded summary — filing-ready for your tax professional." },
             ].map((s, i) => (
@@ -1221,7 +1229,7 @@ function Homepage({ onStart, onCheck }) {
           No account needed. Start adding receipts in seconds.
         </p>
         <button className="pf-btn-primary" onClick={() => { logEvent("CTA_START_CLICKED"); onStart(); }} style={{ background:C.white, color:C.forest, boxShadow:"0 4px 20px rgba(0,0,0,0.18)", margin:"0 auto", padding:"16px 36px", fontSize:16 }}>
-          Organize my receipts →
+          Start my tax file →
         </button>
         <div style={{ marginTop:12, fontSize:12, color:"rgba(255,255,255,0.7)" }}>
           You stay in control — review everything before filing.
@@ -1242,59 +1250,17 @@ function Homepage({ onStart, onCheck }) {
 
 // STEP 1 — ADD RECEIPT
 function AddReceiptScreen({ onMethod, isMobile }) {
-  // Hidden file input for the upload path (images + PDFs).
-  const uploadInputRef = useRef(null);
-
-  // Trigger handler — programmatically opens the file picker.
-  const triggerUpload = () => uploadInputRef.current && uploadInputRef.current.click();
-
-  // After the user selects a file, continue into the established intake flow.
-  // The selected file itself is not yet wired through to extraction (the
-  // existing pipeline uses a mocked extractor); this preserves the current
-  // downstream behavior while making the intake interaction real.
-  const handleFileSelected = e => {
-    const file = e.target && e.target.files && e.target.files[0];
-    if (!file) return;
-    // Reset the input so the same file can be re-picked later
-    e.target.value = "";
-    onMethod("upload");
-  };
-
   return (
     <div className="slide-up" style={{ maxWidth: 520, margin: "0 auto", padding: "40px 24px" }}>
-      {/* Hidden file input — referenced by the Upload CTA below */}
-      <input
-        ref={uploadInputRef}
-        type="file"
-        accept="image/*,application/pdf"
-        style={{ display: "none" }}
-        onChange={handleFileSelected}
-      />
-
       <div style={{ marginBottom: 28 }}>
         <div className="pf-label">Step 1 of 3</div>
         <div className="progress-bar"><div className="progress-fill" style={{ width: "33%" }} /></div>
         <h2 style={{ fontFamily:"'Fraunces', serif", fontSize:28, fontWeight:700, color:C.ink, letterSpacing:"-0.4px", marginBottom:8 }}>
-          Upload your tax documents here
+          Build your tax file
         </h2>
         <p style={{ fontSize:14, color:C.inkLight, lineHeight:1.65 }}>
-          Add receipts, stock or crypto exports, spreadsheets, or PDFs
+          Enter your expense details as you go, so tax season is easier later.
         </p>
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <button className="method-card primary" onClick={triggerUpload} style={{ width:"100%" }}>
-          <span style={{ fontSize:36 }}>📂</span>
-          <div style={{ fontSize:15, fontWeight:700, color:C.forest, fontFamily:"'Fraunces', serif" }}>Upload file</div>
-          <div style={{ fontSize:12, color:C.inkFaint }}>JPG, PNG, or PDF</div>
-        </button>
-      </div>
-
-      <div style={{ position:"relative", marginBottom:16 }}>
-        <div style={{ height:1, background:C.creamDeep }} />
-        <span style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", background:C.cream, padding:"0 12px", fontSize:11, color:C.inkFaint, fontWeight:600 }}>
-          OR
-        </span>
       </div>
 
       <button className="method-card" onClick={() => onMethod("manual")} style={{ width:"100%", flexDirection:"row", justifyContent:"flex-start", padding:"16px 20px", gap:14 }}>
@@ -2051,7 +2017,7 @@ function YearEndSummary({ receipts, onBack, onPrint }) {
   const gross     = receipts.reduce((s, r) => s + (parseFloat(r.amount)||0), 0);
   const n         = receipts.length;
   const prepDate  = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-  const taxYear   = "2025";
+  const taxYear   = TAX_YEAR;
 
   // Category breakdown sorted highest → lowest
   const catTotals = {};
@@ -3896,7 +3862,7 @@ export default function PreFileApp() {
     // ──────────────────────────────────────────────────────────────────────
     const wsMaster = {};
     wsMaster["A1"] = { v: "PreFile Organizer — Master Summary", t: "s", s: titleStyle };
-    wsMaster["A2"] = { v: "Tax Year 2025  ·  Prepared " + preparedDate, t: "s", s: subheaderStyle };
+    wsMaster["A2"] = { v: `Tax Year ${TAX_YEAR}  ·  Prepared ` + preparedDate, t: "s", s: subheaderStyle };
     wsMaster["A3"] = { v: "Filing-ready summary for your tax professional. Confirm all amounts before filing.", t: "s", s: bylineStyle };
 
     // Key totals (rows 5–7)
@@ -3977,7 +3943,7 @@ export default function PreFileApp() {
     // ──────────────────────────────────────────────────────────────────────
     const wsSchC = {};
     wsSchC["A1"] = { v: "Schedule C Expenses", t: "s", s: titleStyle };
-    wsSchC["A2"] = { v: "Tax Year 2025  ·  Receipt totals grouped by Schedule C line", t: "s", s: subheaderStyle };
+    wsSchC["A2"] = { v: `Tax Year ${TAX_YEAR}  ·  Receipt totals grouped by Schedule C line`, t: "s", s: subheaderStyle };
     wsSchC["A3"] = { v: "Line assignments are guidance based on category. Confirm each placement with your tax professional.", t: "s", s: bylineStyle };
 
     // Table headers at row 5
@@ -4071,7 +4037,7 @@ export default function PreFileApp() {
     // ──────────────────────────────────────────────────────────────────────
     const wsBiz = {};
     wsBiz["A1"] = { v: "Business Expenses — by Category", t: "s", s: titleStyle };
-    wsBiz["A2"] = { v: "Tax Year 2025  ·  Receipt-level detail with Schedule C line tags", t: "s", s: subheaderStyle };
+    wsBiz["A2"] = { v: `Tax Year ${TAX_YEAR}  ·  Receipt-level detail with Schedule C line tags`, t: "s", s: subheaderStyle };
     wsBiz["A3"] = { v: "Each row carries the Schedule C line its category typically maps to. Verify before filing.", t: "s", s: bylineStyle };
 
     const BIZ_HDR_ROW = 5;
@@ -4171,7 +4137,7 @@ export default function PreFileApp() {
     // ──────────────────────────────────────────────────────────────────────
     const wsSchD = {};
     wsSchD["A1"] = { v: "Schedule D Preview", t: "s", s: titleStyle };
-    wsSchD["A2"] = { v: "Tax Year 2025  ·  Example layout for capital gains, losses, and investment activity", t: "s", s: subheaderStyle };
+    wsSchD["A2"] = { v: `Tax Year ${TAX_YEAR}  ·  Example layout for capital gains, losses, and investment activity`, t: "s", s: subheaderStyle };
     wsSchD["A3"] = { v: "Sample structure — no real investment data is calculated.", t: "s", s: bylineStyle };
 
     const SCHD_HDR_ROW = 5;
@@ -4246,7 +4212,7 @@ export default function PreFileApp() {
     // ──────────────────────────────────────────────────────────────────────
     const wsSch1 = {};
     wsSch1["A1"] = { v: "Schedule 1 Preview", t: "s", s: titleStyle };
-    wsSch1["A2"] = { v: "Tax Year 2025  ·  Example layout for adjustments and additional income items", t: "s", s: subheaderStyle };
+    wsSch1["A2"] = { v: `Tax Year ${TAX_YEAR}  ·  Example layout for adjustments and additional income items`, t: "s", s: subheaderStyle };
     wsSch1["A3"] = { v: "Sample structure — no real adjustments are calculated.", t: "s", s: bylineStyle };
 
     const SCH1_HDR_ROW = 5;
@@ -4310,7 +4276,7 @@ export default function PreFileApp() {
     // ──────────────────────────────────────────────────────────────────────
     const wsReview = {};
     wsReview["A1"] = { v: "Review & Flags", t: "s", s: titleStyle };
-    wsReview["A2"] = { v: "Tax Year 2025  ·  Items worth confirming before filing", t: "s", s: subheaderStyle };
+    wsReview["A2"] = { v: `Tax Year ${TAX_YEAR}  ·  Items worth confirming before filing`, t: "s", s: subheaderStyle };
     wsReview["A3"] = { v: "Auto-generated from receipt data. None of these are errors — they are checks to confirm.", t: "s", s: bylineStyle };
 
     const REV_HDR_ROW = 5;
@@ -4415,7 +4381,7 @@ export default function PreFileApp() {
     disclaimerSheet["B1"] = { v: "", t: "s", s: titleStyle };
 
     // Row 2: subheader (merged A2:B2)
-    disclaimerSheet["A2"] = { v: "Tax Year 2025  ·  Workbook guide", t: "s", s: subheaderStyle };
+    disclaimerSheet["A2"] = { v: `Tax Year ${TAX_YEAR}  ·  Workbook guide`, t: "s", s: subheaderStyle };
     disclaimerSheet["B2"] = { v: "", t: "s", s: subheaderStyle };
 
     // Row 3: byline (merged A3:B3)
@@ -4531,7 +4497,7 @@ export default function PreFileApp() {
     XLSX.utils.book_append_sheet(wb, wsSchD,          "Schedule D Preview");
     XLSX.utils.book_append_sheet(wb, wsSch1,          "Schedule 1 Preview");
     XLSX.utils.book_append_sheet(wb, wsReview,        "Review & Flags");
-    XLSX.writeFile(wb, "PreFile_Organizer_2025.xlsx");
+    XLSX.writeFile(wb, `PreFile_Organizer_${TAX_YEAR}.xlsx`);
     logEvent("EXPORT_COMPLETED", { count: receipts.length, userType: getUserType(receipts) });
     showToast("Color-coded organizer downloaded ✓");
     // Brief delay so the 'Your filing-ready summary is ready' callout has time to be
