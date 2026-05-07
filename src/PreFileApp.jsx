@@ -3944,6 +3944,7 @@ function Toast({ message, visible }) {
 export default function PreFileApp() {
   // pages: home | receipt-flow | organizer | check | yearend
   const [page, setPage]             = useState("home");
+  const [entryOrigin, setEntryOrigin] = useState("flow"); // flow | organizer
   const [receiptStep, setReceiptStep] = useState("add");
   const [checkStep, setCheckStep]   = useState("questions"); // questions | loading | reveal
   const [checkAnswers, setCheckAnswers] = useState(null);
