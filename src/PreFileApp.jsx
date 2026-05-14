@@ -555,23 +555,93 @@ const GLOBAL_CSS = `
   }
   .pf-btn-primary:hover { background: ${C.forestMid}; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(27,94,32,0.3); }
   .pf-btn-primary:active { transform: translateY(0); }
+  .pf-btn-primary:disabled,
+  .pf-btn-primary[disabled] {
+    background: ${C.creamDeep}; color: ${C.inkFaint};
+    box-shadow: none; cursor: not-allowed;
+    transform: none;
+  }
+  .pf-btn-primary:disabled:hover,
+  .pf-btn-primary[disabled]:hover {
+    background: ${C.creamDeep}; transform: none; box-shadow: none;
+  }
 
   .pf-btn-secondary {
     background: transparent; color: ${C.ink}; border: 1.5px solid ${C.creamDeep};
     border-radius: 13px; padding: 13px 28px; font-size: 14px;
     font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif;
-    transition: background 0.18s, border-color 0.18s;
+    transition: background 0.18s, border-color 0.18s, transform 0.12s;
     display: flex; align-items: center; justify-content: center; gap: 8px;
   }
   .pf-btn-secondary:hover { background: ${C.creamDark}; border-color: ${C.inkFaint}; }
+  .pf-btn-secondary:active { transform: translateY(1px); }
 
   .pf-btn-ghost {
     background: none; border: none; color: ${C.inkFaint};
     font-size: 13px; font-weight: 500; cursor: pointer;
     font-family: 'DM Sans', sans-serif; padding: 8px 0;
     text-decoration: underline; text-underline-offset: 3px;
+    transition: color 0.15s;
   }
   .pf-btn-ghost:hover { color: ${C.ink}; }
+
+  /* Card-shaped clickable surface (e.g., module entry tiles).
+     Same lift-on-hover treatment as .method-card but without the
+     centered-flex layout — used for left-aligned content cards. */
+  .pf-card-button {
+    background: ${C.white}; border: 1px solid ${C.creamDeep};
+    border-radius: 12px; padding: 16px 18px; cursor: pointer;
+    text-align: left; font-family: 'DM Sans', sans-serif;
+    transition: border-color 0.18s, box-shadow 0.18s, transform 0.15s;
+  }
+  .pf-card-button:hover {
+    border-color: ${C.forestLight};
+    box-shadow: 0 4px 20px rgba(27,94,32,0.10);
+    transform: translateY(-1px);
+  }
+
+  /* Logo / brand-mark button — subtle interactivity cue without overpowering. */
+  .pf-logo-btn {
+    background: none; border: none; cursor: pointer;
+    display: flex; align-items: center; gap: 10px;
+    transition: opacity 0.15s;
+  }
+  .pf-logo-btn:hover { opacity: 0.7; }
+
+  /* Inline delete affordance (e.g., remove a Schedule D / Schedule 1 entry).
+     Underlined text-button with hover darken + destructive color shift on hover
+     so the action's weight becomes visible only on intent. */
+  .pf-btn-inline-delete {
+    background: none; border: none; cursor: pointer;
+    font-size: 11px; color: ${C.inkFaint};
+    font-family: 'DM Sans', sans-serif;
+    text-decoration: underline; text-underline-offset: 2px;
+    transition: color 0.15s;
+  }
+  .pf-btn-inline-delete:hover { color: #B91C1C; }
+
+  /* Compact callout CTA — smaller forest button used inside banners like the
+     resume-saved-receipts panel. Same color system as pf-btn-primary, smaller
+     padding, lighter shadow. */
+  .pf-banner-cta {
+    background: ${C.forest}; color: ${C.white}; border: none;
+    border-radius: 9px; padding: 8px 14px; font-size: 12px;
+    font-weight: 700; cursor: pointer; font-family: 'DM Sans', sans-serif;
+    transition: background 0.18s, transform 0.12s;
+  }
+  .pf-banner-cta:hover { background: ${C.forestMid}; transform: translateY(-1px); }
+  .pf-banner-cta:active { transform: translateY(0); }
+
+  /* Underlined secondary action that pairs with .pf-banner-cta (e.g. "Start
+     fresh"). Color darkens on hover. */
+  .pf-banner-link {
+    background: transparent; color: ${C.inkLight}; border: none;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    text-decoration: underline; text-underline-offset: 2px;
+    transition: color 0.15s;
+  }
+  .pf-banner-link:hover { color: ${C.ink}; }
 
   .pf-input {
     width: 100%; padding: 12px 14px; border: 1.5px solid ${C.creamDeep};
@@ -634,6 +704,22 @@ const GLOBAL_CSS = `
   }
   .cat-chip:hover { transform: translateY(-1px); }
   .cat-chip.selected { border-width: 2px; }
+
+  /* Compact selector pill (business % chooser, etc.). Unselected chips get a
+     hover state so users see the affordance; selected chips don't shift on
+     hover since they're already in their target state. */
+  .pf-pct-chip {
+    padding: 4px 12px; border-radius: 20px; font-size: 11px;
+    font-weight: 600; cursor: pointer; border: 1.5px solid ${C.creamDeep};
+    background: ${C.white}; color: ${C.inkLight};
+    font-family: 'DM Sans', sans-serif;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.12s;
+  }
+  .pf-pct-chip:hover { border-color: ${C.inkFaint}; background: ${C.creamDark}; }
+  .pf-pct-chip.selected {
+    border-color: ${C.forest}; background: ${C.forest}; color: ${C.white};
+  }
+  .pf-pct-chip.selected:hover { background: ${C.forestMid}; border-color: ${C.forestMid}; }
 
   @media (max-width: 600px) {
     .mobile-stack { flex-direction: column !important; }
@@ -1070,7 +1156,7 @@ function Nav({ onLogoClick, receiptCount }) {
       background: C.cream, position: "sticky", top: 0, zIndex: 100,
       backdropFilter: "blur(8px)",
     }}>
-      <button onClick={onLogoClick} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
+      <button onClick={onLogoClick} className="pf-logo-btn">
         <div style={{ width: 32, height: 32, background: C.forest, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
   <path d="M3 1.5H15C15.4142 1.5 15.75 1.83579 15.75 2.25V16.5L13.5 15L11.25 16.5L9 15L6.75 16.5L4.5 15L2.25 16.5V2.25C2.25 1.83579 2.58579 1.5 3 1.5Z" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1594,7 +1680,7 @@ function ProcessingScreen({ method, onExtracted, receipts = [] }) {
           </select>
         </div>
 
-        <button className="pf-btn-primary" onClick={handleManualSubmit} style={{ width:"100%", opacity: (!manualData.merchant || !manualData.amount) ? 0.4 : 1 }}
+        <button className="pf-btn-primary" onClick={handleManualSubmit} style={{ width:"100%" }}
           disabled={!manualData.merchant || !manualData.amount}>
           Review receipt →
         </button>
@@ -1748,13 +1834,7 @@ function EditScreen({ receipt, onSave, onCancel }) {
         <div style={{ marginTop:10, display:"flex", gap:8, flexWrap:"wrap" }}>
           {[30, 50, 60, 70, 80, 100].map(pct => (
             <button key={pct} onClick={() => setData(d => ({ ...d, businessPct: pct }))}
-              style={{
-                padding:"4px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer", border:"1.5px solid",
-                borderColor: data.businessPct === pct ? C.forest : C.creamDeep,
-                background: data.businessPct === pct ? C.forest : C.white,
-                color: data.businessPct === pct ? C.white : C.inkLight,
-                transition:"all 0.15s",
-              }}>
+              className={`pf-pct-chip${data.businessPct === pct ? " selected" : ""}`}>
               {pct}%
             </button>
           ))}
@@ -2521,22 +2601,13 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
               <button
                 onClick={onRestore}
-                style={{
-                  background: C.forest, color: C.white, border: "none",
-                  borderRadius: 9, padding: "8px 14px", fontSize: 12,
-                  fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-                }}
+                className="pf-banner-cta"
               >
                 Resume saved receipts
               </button>
               <button
                 onClick={onDiscardRestore}
-                style={{
-                  background: "transparent", color: C.inkLight, border: "none",
-                  fontSize: 12, fontWeight: 600, cursor: "pointer",
-                  fontFamily: "'DM Sans', sans-serif", textDecoration: "underline",
-                  textUnderlineOffset: 2,
-                }}
+                className="pf-banner-link"
               >
                 Start fresh
               </button>
@@ -3290,11 +3361,9 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
           <button
             onClick={onOpenSchedD}
+            className="pf-card-button"
             style={{
-              background: C.white, border: `1px solid ${C.creamDeep}`, borderRadius: 12,
-              padding: "16px 18px", textAlign: "left", cursor: "pointer",
               display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14,
-              fontFamily: "'DM Sans', sans-serif",
             }}
           >
             <div style={{ minWidth: 0, flex: 1 }}>
@@ -3312,11 +3381,9 @@ function OrganizerScreen({ receipts, onAddAnother, isSaved, onExport, showSavedC
 
           <button
             onClick={onOpenSched1}
+            className="pf-card-button"
             style={{
-              background: C.white, border: `1px solid ${C.creamDeep}`, borderRadius: 12,
-              padding: "16px 18px", textAlign: "left", cursor: "pointer",
               display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14,
-              fontFamily: "'DM Sans', sans-serif",
             }}
           >
             <div style={{ minWidth: 0, flex: 1 }}>
@@ -3451,7 +3518,7 @@ function SchedDScreen({ items, onAdd, onDelete, onBack }) {
 
   return (
     <div className="slide-up" style={{ maxWidth: 640, margin: "0 auto", padding: "40px 24px" }}>
-      <button onClick={onBack} style={{ background: "none", border: "none", color: C.inkFaint, fontSize: 13, cursor: "pointer", marginBottom: 16, padding: 0 }}>
+      <button onClick={onBack} className="pf-btn-ghost" style={{ marginBottom: 16, padding: 0, textDecoration: "none" }}>
         ← Back to organizer
       </button>
 
@@ -3482,7 +3549,7 @@ function SchedDScreen({ items, onAdd, onDelete, onBack }) {
                       {it.dateAcquired} → {it.dateSold} · {term || "—"}{ref ? ` · ${ref.part}` : ""} · {gain >= 0 ? "+" : ""}${gain.toFixed(2)}
                     </div>
                   </div>
-                  <button onClick={() => onDelete(it.id)} style={{ background: "none", border: "none", color: C.inkFaint, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>
+                  <button onClick={() => onDelete(it.id)} className="pf-btn-inline-delete">
                     Delete
                   </button>
                 </div>
@@ -3582,7 +3649,7 @@ function Sched1Screen({ items, onAdd, onDelete, onBack }) {
 
   return (
     <div className="slide-up" style={{ maxWidth: 640, margin: "0 auto", padding: "40px 24px" }}>
-      <button onClick={onBack} style={{ background: "none", border: "none", color: C.inkFaint, fontSize: 13, cursor: "pointer", marginBottom: 16, padding: 0 }}>
+      <button onClick={onBack} className="pf-btn-ghost" style={{ marginBottom: 16, padding: 0, textDecoration: "none" }}>
         ← Back to organizer
       </button>
 
@@ -3611,7 +3678,7 @@ function Sched1Screen({ items, onAdd, onDelete, onBack }) {
                       ${(it.amount || 0).toFixed(2)} · {ref.part} · {ref.line}{it.notes ? ` · ${it.notes}` : ""}
                     </div>
                   </div>
-                  <button onClick={() => onDelete(it.id)} style={{ background: "none", border: "none", color: C.inkFaint, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>
+                  <button onClick={() => onDelete(it.id)} className="pf-btn-inline-delete">
                     Delete
                   </button>
                 </div>
